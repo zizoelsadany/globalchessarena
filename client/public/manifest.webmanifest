@@ -1,0 +1,19 @@
+{
+  "name": "Global Chess Arena",
+  "short_name": "Chess Arena",
+  "description": "Real-time rated chess matches with profile avatars and board themes.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0f0f0f",
+  "theme_color": "#8b5e24",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
