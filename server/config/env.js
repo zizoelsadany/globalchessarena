@@ -30,5 +30,6 @@ export const env = {
   clientUrl: process.env.CLIENT_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : "http://localhost:5173"),
   jwtSecret: process.env.JWT_SECRET || "dev-only-secret-change-me",
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || "7d",
+  stockfishPath: process.env.STOCKFISH_PATH || null,
   db: railwayDbConfig()
 };

@@ -1,5 +1,6 @@
+import bcrypt from "bcrypt";
 import { z } from "zod";
-import { findUserById, listUsers, updateUserProfile } from "../models/User.js";
+import { findUserById, findUserWithPasswordById, listUsers, updateUserProfile } from "../models/User.js";
 
 const avatarSchema = z
   .enum(["crown", "knight", "rook", "pawn", "bishop", "queen"])
@@ -8,7 +9,10 @@ const avatarSchema = z
   .or(z.literal(""));
 
 export const profileSchema = z.object({
-  username: z.string().trim().min(3).max(32).regex(/^[a-zA-Z0-9_]+$/).optional(),
+  username: z.string().trim().min(3).max(32).regex(/^[a-zA-Z0-9_]+$/).optional().or(z.literal("")),
+  email: z.string().trim().email().max(255).optional().or(z.literal("")),
+  currentPassword: z.string().optional().or(z.literal("")),
+  newPassword: z.string().min(8).max(128).optional().or(z.literal("")),
   avatar: avatarSchema
 });
 
@@ -24,11 +28,32 @@ export async function getProfile(req, res, next) {
 
 export async function updateProfile(req, res, next) {
   try {
-    const user = await updateUserProfile(req.user.id, req.body);
+    const { username, email, currentPassword, newPassword, avatar } = req.body;
+    let passwordHash;
+
+    if (newPassword && newPassword.length > 0) {
+      const userWithPassword = await findUserWithPasswordById(req.user.id);
+      
+      // If user registered via Google, they might have the "GOOGLE_AUTH" placeholder password
+      if (userWithPassword.password !== "GOOGLE_AUTH") {
+        if (!currentPassword) return res.status(400).json({ message: "Current password is required to set a new password" });
+        const isValid = await bcrypt.compare(currentPassword, userWithPassword.password);
+        if (!isValid) return res.status(401).json({ message: "Incorrect current password" });
+      }
+      
+      passwordHash = await bcrypt.hash(newPassword, 12);
+    }
+
+    const user = await updateUserProfile(req.user.id, {
+      username: username || undefined,
+      email: email || undefined,
+      password: passwordHash,
+      avatar: avatar !== undefined ? avatar : undefined
+    });
     res.json({ user });
   } catch (error) {
     if (error.code === "ER_DUP_ENTRY") {
-      return res.status(409).json({ message: "Username is already taken" });
+      return res.status(409).json({ message: "Username or email is already taken" });
     }
     next(error);
   }

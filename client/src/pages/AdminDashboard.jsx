@@ -1,16 +1,15 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
-import { ShieldAlert, Users, Flag, Bell, Trophy } from "lucide-react";
+import { ShieldAlert, Users, Flag, Bell, Trophy, Eye } from "lucide-react";
 import { useLanguage } from "../context/LanguageContext.jsx";
-import { fetchAdminDashboard, banUser, unbanUser, deleteUser, resolveReport, createNotification, createTournament } from "../services/admin.js";
+import { fetchAdminDashboard, banUser, unbanUser, deleteUser, resolveReport, broadcastNotification, resetSiteVisits } from "../services/admin.js";
 
 export default function AdminDashboard() {
-  const { t, lang } = useLanguage();
+  const { lang } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [dashboard, setDashboard] = useState(null);
   const [notificationText, setNotificationText] = useState("");
-  const [tournamentName, setTournamentName] = useState("");
-  const [tournamentDescription, setTournamentDescription] = useState("");
 
   useEffect(() => {
     fetchAdminDashboard()
@@ -19,16 +18,20 @@ export default function AdminDashboard() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="panel"><p>{lang === "ar" ? "جارٍ تحميل لوحة الإدارة..." : "Loading admin dashboard..."}</p></div>;
+  if (loading) return <div className="panel"><p>{lang === "ar" ? "جار تحميل لوحة الإدارة..." : "Loading admin dashboard..."}</p></div>;
   if (!dashboard) return null;
+
+  const refreshDashboard = async () => {
+    const refreshed = await fetchAdminDashboard();
+    setDashboard(refreshed);
+  };
 
   const handleUserAction = async (action, userId) => {
     try {
       if (action === "ban") await banUser(userId);
       if (action === "unban") await unbanUser(userId);
       if (action === "delete") await deleteUser(userId);
-      const refreshed = await fetchAdminDashboard();
-      setDashboard(refreshed);
+      await refreshDashboard();
       toast.success(lang === "ar" ? "تم التنفيذ" : "Action completed");
     } catch (error) {
       toast.error(error.message);
@@ -38,8 +41,7 @@ export default function AdminDashboard() {
   const handleResolveReport = async (reportId) => {
     try {
       await resolveReport(reportId, "resolved");
-      const refreshed = await fetchAdminDashboard();
-      setDashboard(refreshed);
+      await refreshDashboard();
       toast.success(lang === "ar" ? "تم حل التقرير" : "Report resolved");
     } catch (error) {
       toast.error(error.message);
@@ -48,63 +50,139 @@ export default function AdminDashboard() {
 
   const handleSendNotification = async () => {
     try {
-      await createNotification(notificationText);
+      await broadcastNotification(notificationText);
       setNotificationText("");
-      const refreshed = await fetchAdminDashboard();
-      setDashboard(refreshed);
+      await refreshDashboard();
       toast.success(lang === "ar" ? "تم إرسال الإشعار" : "Notification sent");
     } catch (error) {
       toast.error(error.message);
     }
   };
 
-  const handleCreateTournament = async () => {
-    try {
-      await createTournament({ name: tournamentName, description: tournamentDescription, status: "upcoming" });
-      setTournamentName("");
-      setTournamentDescription("");
-      const refreshed = await fetchAdminDashboard();
-      setDashboard(refreshed);
-      toast.success(lang === "ar" ? "تم إنشاء البطولة" : "Tournament created");
-    } catch (error) {
-      toast.error(error.message);
+  const adminCards = [
+    {
+      key: "users",
+      title: lang === "ar" ? "المستخدمون" : "Users",
+      description: lang === "ar" ? "افتح صفحة مستخدمين منفصلة لإدارة الحسابات." : "Open a separate users page to manage accounts.",
+      to: "/admin/users"
+    },
+    {
+      key: "reports",
+      title: lang === "ar" ? "التقارير" : "Reports",
+      description: lang === "ar" ? "افتح صفحة التقارير لمعالجة البلاغات واحدة تلو الأخرى." : "Open the reports page to handle reports one by one.",
+      to: "/admin/reports"
+    },
+    {
+      key: "notifications",
+      title: lang === "ar" ? "الإشعارات" : "Notifications",
+      description: lang === "ar" ? "افتح صفحة الإشعارات لإرسال رسائل واضحة." : "Open the notifications page to send clear messages.",
+      to: "/admin/notifications"
+    },
+    {
+      key: "tournaments",
+      title: lang === "ar" ? "البطولات" : "Tournaments",
+      description: lang === "ar" ? "افتح صفحة البطولات لإدارة المسابقة وجدولة المباريات." : "Open the tournaments page to manage events and match scheduling.",
+      to: "/admin/tournaments"
+    },
+    {
+      key: "analyses",
+      title: lang === "ar" ? "التحليلات" : "Analyses",
+      description: lang === "ar" ? "عرض وحذف طلبات تحليل المباريات التي تمت بواسطة المستخدمين." : "View and delete game analysis requests triggered by users.",
+      to: "/admin/analyses"
     }
-  };
+  ];
 
   return (
     <section className="panel admin-dashboard">
       <div className="panel-title"><ShieldAlert size={18} /><h2>{lang === "ar" ? "لوحة تحكم الأدمن" : "Admin Dashboard"}</h2></div>
-      <div className="dashboard-summary" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 20 }}>
+
+      <div className="dashboard-summary" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16, marginBottom: 20 }}>
+        <div className="stat-card" style={{ flexDirection: "column", alignItems: "flex-start", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Eye size={18} />
+            <strong style={{ fontSize: "1.5rem" }}>{dashboard.siteVisits || 0}</strong>
+          </div>
+          <span>{lang === "ar" ? "الزيارات" : "Site Visits"}</span>
+          <button
+            onClick={async () => {
+              try {
+                await resetSiteVisits();
+                setDashboard(prev => ({ ...prev, siteVisits: 0 }));
+                toast.success(lang === "ar" ? "تم تصفير الزيارات" : "Visits reset to 0");
+              } catch (e) {
+                toast.error(e.message);
+              }
+            }}
+            style={{
+              marginTop: 4,
+              padding: "4px 10px",
+              fontSize: "0.75rem",
+              background: "var(--danger, #e53)",
+              color: "#fff",
+              border: "none",
+              borderRadius: 6,
+              cursor: "pointer"
+            }}
+          >
+            {lang === "ar" ? "تصفير" : "Reset"}
+          </button>
+        </div>
         <div className="stat-card"><Users size={18} /><strong>{dashboard.users.length}</strong><span>{lang === "ar" ? "المستخدمون" : "All users"}</span></div>
         <div className="stat-card"><Flag size={18} /><strong>{dashboard.matches.length}</strong><span>{lang === "ar" ? "المباريات" : "All matches"}</span></div>
         <div className="stat-card"><Bell size={18} /><strong>{dashboard.openReportCount}</strong><span>{lang === "ar" ? "التقارير المفتوحة" : "Open reports"}</span></div>
         <div className="stat-card"><Trophy size={18} /><strong>{dashboard.tournaments.length}</strong><span>{lang === "ar" ? "البطولات" : "Tournaments"}</span></div>
       </div>
 
-      <div className="admin-panel-grid" style={{ display: "grid", gap: 20 }}>
-        <div className="panel admin-panel">
-          <h3>{lang === "ar" ? "المستخدمون" : "Users"}</h3>
-          <div className="table-wrap"><table><thead><tr><th>{lang === "ar" ? "اسم المستخدم" : "Username"}</th><th>{lang === "ar" ? "البريد" : "Email"}</th><th>{lang === "ar" ? "الحالة" : "Status"}</th><th>{lang === "ar" ? "إجراءات" : "Actions"}</th></tr></thead><tbody>{dashboard.users.map((player) => (<tr key={player.id}><td>{player.username}</td><td>{player.email}</td><td>{player.status}</td><td style={{ display: "flex", gap: 6 }}><button className="primary" type="button" onClick={() => handleUserAction(player.status === "active" ? "ban" : "unban", player.id)}>{player.status === "active" ? (lang === "ar" ? "حظر" : "Ban") : (lang === "ar" ? "رفع الحظر" : "Unban")}</button><button className="danger-btn" type="button" onClick={() => handleUserAction("delete", player.id)}>{lang === "ar" ? "حذف" : "Delete"}</button></td></tr>))}</tbody></table></div>
-        </div>
-
-        <div className="panel admin-panel">
-          <h3>{lang === "ar" ? "التقارير" : "Reports"}</h3>
-          <div className="table-wrap"><table><thead><tr><th>{lang === "ar" ? "المبلغ" : "Reporter"}</th><th>{lang === "ar" ? "المبلغ عنه" : "Reported"}</th><th>{lang === "ar" ? "النوع" : "Type"}</th><th>{lang === "ar" ? "الرسالة" : "Message"}</th><th>{lang === "ar" ? "إجراءات" : "Actions"}</th></tr></thead><tbody>{dashboard.reports.map((report) => (<tr key={report.id}><td>{report.reporter_username}</td><td>{report.reported_username || "-"}</td><td>{report.type}</td><td>{report.message}</td><td><button className="primary" type="button" onClick={() => handleResolveReport(report.id)}>{lang === "ar" ? "حل" : "Resolve"}</button></td></tr>))}</tbody></table></div>
-        </div>
-
-        <div className="panel admin-panel">
-          <h3>{lang === "ar" ? "إرسال إشعار" : "Send notification"}</h3>
-          <textarea value={notificationText} onChange={(event) => setNotificationText(event.target.value)} placeholder={lang === "ar" ? "نص الإشعار" : "Notification message"} rows={4} style={{ width: "100%", borderRadius: 10, padding: 12, border: "1px solid var(--line)", background: "var(--panel)", color: "var(--text)" }} />
-          <button className="primary" type="button" onClick={handleSendNotification} style={{ marginTop: 12 }}>{lang === "ar" ? "إرسال" : "Send"}</button>
-        </div>
-
-        <div className="panel admin-panel">
-          <h3>{lang === "ar" ? "إدارة البطولات" : "Manage tournaments"}</h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <input type="text" placeholder={lang === "ar" ? "اسم البطولة" : "Tournament name"} value={tournamentName} onChange={(event) => setTournamentName(event.target.value)} style={{ padding: 10, borderRadius: 6, border: "1px solid var(--line)", background: "var(--panel)", color: "var(--text)", fontSize: 14 }} />
-            <textarea placeholder={lang === "ar" ? "وصف البطولة" : "Tournament description"} value={tournamentDescription} onChange={(event) => setTournamentDescription(event.target.value)} rows={3} style={{ padding: 10, borderRadius: 6, border: "1px solid var(--line)", background: "var(--panel)", color: "var(--text)", fontSize: 14, resize: "none", fontFamily: "inherit" }} />
-            <button className="primary" type="button" onClick={handleCreateTournament}>{lang === "ar" ? "إنشاء بطولة" : "Create tournament"}</button>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 18 }}>
+        {adminCards.map((card) => (
+          <div key={card.key} className="panel admin-panel" style={{ minHeight: 180, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+            <div>
+              <h3>{card.title}</h3>
+              <p style={{ marginTop: 12, color: "var(--muted)", lineHeight: 1.6 }}>{card.description}</p>
+            </div>
+            <Link to={card.to} className="primary as-link" style={{ alignSelf: "flex-start", marginTop: 16 }}>
+              {lang === "ar" ? "افتح الصفحة" : "Open page"}
+            </Link>
           </div>
+        ))}
+      </div>
+
+      <div className="panel" style={{ marginTop: 24 }}>
+        <h3>{lang === "ar" ? "أحدث المباريات والنتائج" : "Recent Matches & Results"}</h3>
+        <div className="table-responsive" style={{ marginTop: 16 }}>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>{lang === "ar" ? "الأبيض" : "White"}</th>
+                <th>{lang === "ar" ? "الأسود" : "Black"}</th>
+                <th>{lang === "ar" ? "النتيجة" : "Result"}</th>
+                <th>{lang === "ar" ? "الفائز" : "Winner"}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dashboard.matches.slice(0, 10).map((match) => (
+                <tr key={match.id}>
+                  <td>#{match.id}</td>
+                  <td>{match.white_username}</td>
+                  <td>{match.black_username}</td>
+                  <td>
+                    <span className={`status-badge ${match.result ? "resolved" : "open"}`}>
+                      {match.result ? match.result.replace("_", " ") : (lang === "ar" ? "جارية" : "Ongoing")}
+                    </span>
+                  </td>
+                  <td>{match.winner_username || "-"}</td>
+                </tr>
+              ))}
+              {dashboard.matches.length === 0 && (
+                <tr>
+                  <td colSpan="5" style={{ textAlign: "center", padding: "1rem" }}>
+                    {lang === "ar" ? "لا توجد مباريات بعد" : "No matches yet"}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </section>

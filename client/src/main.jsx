@@ -8,6 +8,7 @@ import { AuthProvider } from "./context/AuthContext.jsx";
 import { SocketProvider } from "./context/SocketContext.jsx";
 import { ThemeProvider } from "./context/ThemeContext.jsx";
 import { LanguageProvider } from "./context/LanguageContext.jsx";
+import { GoogleOAuthProvider } from "@react-oauth/google";
 import "./styles.css";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
@@ -18,7 +19,9 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           <AuthProvider>
             <SocketProvider>
             <ErrorBoundary>
-              <App />
+              <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID || "940530069798-btep8vnv8d38hakcjp8237higegtqfll.apps.googleusercontent.com"}>
+                <App />
+              </GoogleOAuthProvider>
             </ErrorBoundary>
             <Toaster
               position="top-center"

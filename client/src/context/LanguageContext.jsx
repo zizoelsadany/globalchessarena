@@ -98,8 +98,22 @@ const translations = {
     joined: "Joined",
     join: "Join",
     participants: "Participants",
-    loadingTournaments: "Loading tournaments...",
-    noTournaments: "No tournaments available right now."
+    maxParticipants: "Max players",
+    logoUrl: "Logo URL",
+    styleColor: "Style color",
+    endsAt: "Ends at",
+    scheduleMatch: "Schedule match",
+    whitePlayer: "White player",
+    blackPlayer: "Black player",
+    scheduledTime: "Match time",
+    createNewTournament: "Create tournament",
+    updateTournament: "Update tournament",
+    deleteTournament: "Delete tournament",
+    selectTournament: "Select a tournament to edit",
+    noTournaments: "No tournaments available right now.",
+    events: "Events",
+    active: "Active",
+    upcoming: "Upcoming"
   },
   ar: {
     dashboard: "لوحة التحكم",
@@ -181,6 +195,7 @@ const translations = {
     inviteEnterId: "أدخل معرف من 6 أرقام",
     inviteSend: "أرسل الدعوة",
     admin: "لوحة الأدمن",
+    tournamentManagement: "إدارة البطولات",
     sendNotification: "إرسال إشعار",
     createTournament: "إنشاء بطولة",
     openReports: "التقارير",
@@ -196,8 +211,22 @@ const translations = {
     joined: "منضم",
     join: "انضم",
     participants: "مشترك",
-    loadingTournaments: "جارٍ تحميل البطولات...",
-    noTournaments: "لا توجد بطولات متاحة حالياً."
+    maxParticipants: "أقصى عدد لاعبين",
+    logoUrl: "رابط الشعار",
+    styleColor: "لون البطولة",
+    endsAt: "تنتهي في",
+    scheduleMatch: "جدولة مباراة",
+    whitePlayer: "لاعب الأبيض",
+    blackPlayer: "لاعب الأسود",
+    scheduledTime: "ميعاد المباراة",
+    createNewTournament: "إنشاء بطولة جديدة",
+    updateTournament: "تحديث البطولة",
+    deleteTournament: "حذف البطولة",
+    selectTournament: "اختر بطولة للتعديل",
+    noTournaments: "لا توجد بطولات متاحة حالياً.",
+    events: "الفعاليات",
+    active: "نشط",
+    upcoming: "قادم"
   }
 };
 

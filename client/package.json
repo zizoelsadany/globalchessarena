@@ -9,6 +9,7 @@
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
+    "@react-oauth/google": "^0.13.5",
     "@vitejs/plugin-react": "^4.3.4",
     "canvas-confetti": "^1.9.4",
     "chess.js": "^1.0.0",
@@ -19,7 +20,8 @@
     "react-dom": "^18.3.1",
     "react-hot-toast": "^2.4.1",
     "react-router-dom": "^7.0.2",
-    "socket.io-client": "^4.8.1"
+    "socket.io-client": "^4.8.1",
+    "stockfish": "^18.0.8"
   },
   "devDependencies": {
     "vite": "^6.0.3"

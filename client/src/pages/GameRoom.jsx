@@ -11,6 +11,9 @@ import { useTheme } from "../context/ThemeContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { getAvatarSrc } from "../data/avatarOptions.js";
 import { submitReport } from "../services/report.js";
+import { api } from "../services/api.js";
+import GameChat from "../components/GameChat.jsx";
+import { saveComputerMatch } from "../utils/computerMatches.js";
 import confetti from "canvas-confetti";
 
 function formatClock(ms = 0) {
@@ -38,13 +41,28 @@ function formatMoveSymbol(move, isWhite) {
   return move;
 }
 
+function getPlayerFallback(color, lang) {
+  return {
+    id: null,
+    username: color === "white" ? (lang === "ar" ? "الأبيض" : "White") : (lang === "ar" ? "الأسود" : "Black"),
+    elo_rating: 0,
+    avatar: null
+  };
+}
+
 function getEndInfo(payload, userId, lang) {
   const winnerColor = payload.result === "white_win" ? "white" : payload.result === "black_win" ? "black" : null;
   const loserColor = winnerColor === "white" ? "black" : winnerColor === "black" ? "white" : null;
-  const winnerPlayer = winnerColor ? payload.players[winnerColor] : null;
-  const loserPlayer = loserColor ? payload.players[loserColor] : null;
-  const winnerName = winnerPlayer ? (winnerPlayer.id === userId ? (lang === "ar" ? "أنت" : "You") : winnerPlayer.username) : "";
-  const loserName = loserPlayer ? (loserPlayer.id === userId ? (lang === "ar" ? "أنت" : "You") : loserPlayer.username) : "";
+  const winnerPlayer = winnerColor ? payload.players?.[winnerColor] : null;
+  const loserPlayer = loserColor ? payload.players?.[loserColor] : null;
+  const fallbackWinner = winnerColor ? getPlayerFallback(winnerColor, lang) : getPlayerFallback("white", lang);
+  const fallbackLoser = loserColor ? getPlayerFallback(loserColor, lang) : getPlayerFallback("black", lang);
+  const winnerName = winnerPlayer
+    ? (winnerPlayer.id === userId ? (lang === "ar" ? "أنت" : "You") : winnerPlayer.username)
+    : (payload.winner_username || fallbackWinner.username);
+  const loserName = loserPlayer
+    ? (loserPlayer.id === userId ? (lang === "ar" ? "أنت" : "You") : loserPlayer.username)
+    : fallbackLoser.username;
   let message = lang === "ar" ? "انتهت المباراة." : "Match finished.";
 
   if (payload.reason === "resign") {
@@ -107,59 +125,128 @@ function evaluateBoard(chess, playerColor) {
   return score;
 }
 
-function getBestMove(chess, computerColor) {
+function minimax(chess, depth, alpha, beta, isMaximizing, computerColor) {
+  if (depth === 0 || chess.isGameOver()) {
+    return evaluateBoard(chess, computerColor);
+  }
+
+  const moves = chess.moves({ verbose: true });
+  if (isMaximizing) {
+    let maxEval = -Infinity;
+    for (const move of moves) {
+      try {
+        chess.move(move);
+        const ev = minimax(chess, depth - 1, alpha, beta, false, computerColor);
+        chess.undo();
+        maxEval = Math.max(maxEval, ev);
+        alpha = Math.max(alpha, ev);
+        if (beta <= alpha) break;
+      } catch (e) {
+        continue;
+      }
+    }
+    return maxEval;
+  } else {
+    let minEval = Infinity;
+    for (const move of moves) {
+      try {
+        chess.move(move);
+        const ev = minimax(chess, depth - 1, alpha, beta, true, computerColor);
+        chess.undo();
+        minEval = Math.min(minEval, ev);
+        beta = Math.min(beta, ev);
+        if (beta <= alpha) break;
+      } catch (e) {
+        continue;
+      }
+    }
+    return minEval;
+  }
+}
+
+function getMinimaxMove(chess, depth, computerColor) {
   const moves = chess.moves({ verbose: true });
   if (moves.length === 0) return null;
-  
+
   let bestMove = null;
   let bestScore = -Infinity;
-  
-  // Shuffle moves to add variety
   const shuffledMoves = [...moves].sort(() => Math.random() - 0.5);
-  
+
   for (const move of shuffledMoves) {
     try {
       chess.move(move);
+      // Opponent wants to minimize computer's evaluation score
+      const score = minimax(chess, depth - 1, -Infinity, Infinity, false, computerColor);
+      chess.undo();
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestMove = move;
+      }
     } catch (e) {
       continue;
     }
-    
-    // Check if this move leads to immediate checkmate
-    if (chess.isCheckmate()) {
-      chess.undo();
-      return move;
-    }
-    
-    // Depth 1 evaluation (what is the worst opponent response?)
-    const opponentMoves = chess.moves({ verbose: true });
-    let minOpponentScore = Infinity;
-    
-    if (opponentMoves.length === 0) {
-      minOpponentScore = chess.isDraw() || chess.isStalemate() ? 0 : -90000;
-    } else {
-      for (const oppMove of opponentMoves) {
-        try {
-          chess.move(oppMove);
-        } catch (e) {
-          continue;
-        }
-        const score = evaluateBoard(chess, computerColor);
-        if (score < minOpponentScore) {
-          minOpponentScore = score;
-        }
-        chess.undo();
-      }
-    }
-    
-    chess.undo();
-    
-    if (minOpponentScore > bestScore) {
-      bestScore = minOpponentScore;
-      bestMove = move;
-    }
   }
-  
   return bestMove || shuffledMoves[0];
+}
+
+function getBestMove(chess, computerColor, level = "hard") {
+  const moves = chess.moves({ verbose: true });
+  if (moves.length === 0) return null;
+
+  // 1. Easy level: 75% random, 25% depth 1 minimax
+  if (level === "easy") {
+    if (Math.random() < 0.75) {
+      return moves[Math.floor(Math.random() * moves.length)];
+    }
+    return getMinimaxMove(chess, 1, computerColor);
+  }
+
+  // 2. Hard level: 10% random, 90% depth 1 minimax
+  if (level === "hard") {
+    if (Math.random() < 0.10) {
+      return moves[Math.floor(Math.random() * moves.length)];
+    }
+    return getMinimaxMove(chess, 1, computerColor);
+  }
+
+  // 3. Very Hard level: Minimax depth 2
+  if (level === "very_hard") {
+    return getMinimaxMove(chess, 2, computerColor);
+  }
+
+  // 4. Impossible level: Minimax depth 3
+  if (level === "impossible") {
+    return getMinimaxMove(chess, 3, computerColor);
+  }
+
+  // Fallback
+  return getMinimaxMove(chess, 1, computerColor);
+}
+
+function getAiName(level, lang) {
+  switch(level) {
+    case "easy":
+      return lang === "ar" ? "ذكاء اصطناعي (سهل)" : "Chess AI (Easy)";
+    case "very_hard":
+      return lang === "ar" ? "ذكاء اصطناعي (صعب جداً)" : "Chess AI (Very Hard)";
+    case "impossible":
+      return lang === "ar" ? "ذكاء اصطناعي (مستحيل)" : "Chess AI (Impossible)";
+    case "hard":
+    default:
+      return lang === "ar" ? "ذكاء اصطناعي (صعب)" : "Chess AI (Hard)";
+  }
+}
+
+function getAiElo(level) {
+  switch(level) {
+    case "easy": return 800;
+    case "very_hard": return 2000;
+    case "impossible": return 2600;
+    case "hard":
+    default:
+      return 1500;
+  }
 }
 
 export default function GameRoom() {
@@ -173,17 +260,24 @@ export default function GameRoom() {
   const [game, setGame] = useState(null);
   const [ended, setEnded] = useState(null);
   const [focusMode, setFocusMode] = useState(false);
+  const [chatMessages, setChatMessages] = useState([]);
 
-  const onGameUpdate = useCallback((payload) => setGame(payload), []);
+  const onGameUpdate = useCallback((payload) => {
+    if (!payload) return;
+    setGame(payload);
+    setChatMessages(payload.chat || []);
+  }, []);
   const onGameEnd = useCallback((payload) => {
+    if (!payload) return;
     setGame(payload);
     setEnded(payload);
+    setChatMessages(payload.chat || []);
 
-    const isWhite = payload.players.white.id === user?.id;
-    const isBlack = payload.players.black.id === user?.id;
+    const isWhite = payload.players?.white?.id === user?.id;
+    const isBlack = payload.players?.black?.id === user?.id;
     const myRole = isWhite ? "white" : isBlack ? "black" : "spectator";
 
-    const winnerColor = payload.result === "white_win" ? "white" : "black";
+    const winnerColor = payload.result === "white_win" ? "white" : payload.result === "black_win" ? "black" : null;
     const amIWinner = myRole === winnerColor;
 
     // Trigger Confetti for the Winner!
@@ -201,15 +295,15 @@ export default function GameRoom() {
         });
       }, 400);
     }
-
-    setEnded(payload);
   }, [user?.id]);
 
   const myColor = useMemo(() => {
     if (state?.color) return state.color;
-    if (!game || !user) return "white";
-    return game.players.white.id === user.id ? "white" : "black";
+    if (!game || !user || !game.players?.white || !game.players?.black) return "white";
+    return game.players?.white?.id === user.id ? "white" : "black";
   }, [game, state?.color, user]);
+
+  const [gameStartTime, setGameStartTime] = useState(null);
 
   const movesHistory = useMemo(() => {
     if (!game?.pgn) return [];
@@ -267,41 +361,116 @@ export default function GameRoom() {
   }, [game?.pgn]);
 
   const customPieces = useMemo(() => {
+    const isPremium = user?.role === "admin" || user?.is_premium === 1;
+    const activeTheme = isPremium ? (localStorage.getItem("gca_piece_theme") || "neo") : "neo";
     const pieces = ["wp", "wn", "wb", "wr", "wq", "wk", "bp", "bn", "bb", "br", "bq", "bk"];
     const map = {};
     pieces.forEach((p) => {
       const key = p.charAt(0) + p.charAt(1).toUpperCase();
       map[key] = ({ squareWidth }) => (
         <img
-          src={`https://images.chesscomfiles.com/chess-themes/pieces/neo/150/${p}.png`}
+          src={`https://images.chesscomfiles.com/chess-themes/pieces/${activeTheme}/150/${p}.png`}
           alt={p}
           style={{ width: squareWidth, height: squareWidth, objectFit: "contain" }}
         />
       );
     });
     return map;
-  }, []);
+  }, [user]);
 
   const isPlayer = useMemo(() => {
     if (!game || !user) return false;
-    return game.players.white.id === user.id || game.players.black.id === user.id;
+    return [game.players?.white?.id, game.players?.black?.id].includes(user.id);
   }, [game, user]);
 
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportType, setReportType] = useState("problem");
   const [reportMessage, setReportMessage] = useState("");
   const [reportTargetId, setReportTargetId] = useState("");
+  const [endAnalysis, setEndAnalysis] = useState(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisError, setAnalysisError] = useState(null);
 
   const endInfo = useMemo(() => {
     if (!ended) return null;
     return getEndInfo(ended, user?.id, lang);
   }, [ended, user?.id, lang]);
 
+  const location = useLocation();
+  const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const aiLevel = useMemo(() => searchParams.get("level") || "hard", [searchParams]);
+
   // Note: No auto-close - modal remains until user presses Back.
+
+  function extractMovesFromPgn(pgn) {
+    const chess = new Chess();
+    try {
+      chess.loadPgn(pgn);
+    } catch {
+      return [];
+    }
+
+    return chess.history({ verbose: true }).map((move, index) => ({
+      id: `${index}-${move.san}`,
+      moveNumber: Math.ceil((index + 1) / 2),
+      color: move.color === "w" ? "white" : "black",
+      move_notation: move.san,
+      piece: move.piece,
+      captured: !!move.captured,
+      from: move.from,
+      to: move.to
+    }));
+  }
 
   const handleLeaveMatch = () => {
     navigate("/");
   };
+
+  useEffect(() => {
+    if (roomId === "computer" && ended && gameStartTime && ended.players?.white && ended.players?.black) {
+      const moves = extractMovesFromPgn(ended.pgn);
+      const winnerUsername = ended.result === "white_win" ? ended.players?.white?.username : ended.result === "black_win" ? ended.players?.black?.username : null;
+      saveComputerMatch({
+        id: `computer-${gameStartTime}`,
+        source: "computer",
+        matchId: "computer",
+        white_username: ended.players?.white?.username || "White",
+        black_username: ended.players?.black?.username || "Black",
+        result: ended.result,
+        reason: ended.reason,
+        start_time: new Date(gameStartTime).toISOString(),
+        end_time: new Date().toISOString(),
+        winner_username: winnerUsername,
+        userColor: ended.players?.white?.id === user?.id ? "white" : "black",
+        pgn: ended.pgn,
+        moves
+      });
+    }
+  }, [ended, roomId, gameStartTime, user?.id]);
+
+  useEffect(() => {
+    if (!ended || !game?.matchId || game.matchId === "computer") return;
+
+    let ignore = false;
+    async function loadEndAnalysis() {
+      setAnalysisLoading(true);
+      setAnalysisError(null);
+      setEndAnalysis(null);
+      try {
+        const { stockfish } = await api(`/matches/${game.matchId}/analysis`);
+        if (!ignore) setEndAnalysis(stockfish);
+      } catch (error) {
+        if (!ignore) setAnalysisError(error.message);
+      } finally {
+        if (!ignore) setAnalysisLoading(false);
+      }
+    }
+
+    loadEndAnalysis();
+    return () => {
+      ignore = true;
+    };
+  }, [ended, game?.matchId]);
 
   const handleSendReport = async () => {
     if (!reportMessage.trim() || reportMessage.trim().length < 10) {
@@ -324,7 +493,8 @@ export default function GameRoom() {
   };
 
   const handleResign = () => {
-    if (window.confirm("هل أنت متأكد من أنك تريد الانسحاب؟ Are you sure you want to resign?")) {
+    const confirmText = lang === "ar" ? "هل أنت متأكد من أنك تريد الانسحاب؟" : "Are you sure you want to resign?";
+    if (window.confirm(confirmText)) {
       if (roomId === "computer") {
         const resignedGame = {
           ...game,
@@ -347,7 +517,11 @@ export default function GameRoom() {
         matchId: "computer",
         players: {
           white: { id: user?.id || "user", username: user?.username || "You", elo_rating: user?.elo_rating ?? 0 },
-          black: { id: "computer", username: lang === "ar" ? "ذكاء اصطناعي (متوسط)" : "Chess AI (Medium)", elo_rating: 1500 }
+          black: { 
+            id: "computer", 
+            username: getAiName(aiLevel, lang), 
+            elo_rating: getAiElo(aiLevel) 
+          }
         },
         timers: { white: 10 * 60 * 1000, black: 10 * 60 * 1000 },
         status: "active",
@@ -360,10 +534,11 @@ export default function GameRoom() {
       };
       setGame(localGame);
       setEnded(null);
+      setGameStartTime(Date.now());
     } else {
       if (socket && roomId) socket.emit("joinRoom", { roomId });
     }
-  }, [roomId, socket, user]);
+  }, [roomId, socket, user, lang, aiLevel]);
 
   useEffect(() => {
     if (roomId !== "computer" || ended || game?.status !== "active") return;
@@ -407,9 +582,23 @@ export default function GameRoom() {
 
 
 
+  const onGameChat = useCallback((payload) => {
+    if (payload?.roomId !== roomId) return;
+    setChatMessages((messages) => [...messages, payload.message].slice(-100));
+  }, [roomId]);
+
+  const handleSendGameChat = useCallback((message) => {
+    if (!socket || !roomId) {
+      return toast.error(lang === "ar" ? "غير متصل بالخادم" : "Socket is not connected");
+    }
+    if (!message || !message.trim()) return;
+    socket.emit("sendGameChat", { roomId, message: message.trim() });
+  }, [socket, roomId, lang]);
+
   useSocketEvent(socket, "gameUpdate", onGameUpdate);
   useSocketEvent(socket, "gameEnd", onGameEnd);
-  useSocketEvent(socket, "playerDisconnected", () => toast("Opponent disconnected"));
+  useSocketEvent(socket, "playerDisconnected", () => toast(lang === "ar" ? "انقطع الخصم" : "Opponent disconnected"));
+  useSocketEvent(socket, "gameChat", onGameChat);
 
   const [optionSquares, setOptionSquares] = useState({});
   const [selectedSquare, setSelectedSquare] = useState("");
@@ -558,7 +747,7 @@ export default function GameRoom() {
   const makeComputerMove = useCallback((currentChess, currentGame) => {
     if (currentChess.turn() !== "b" || currentGame.status !== "active") return;
     
-    const bestMove = getBestMove(currentChess, "b");
+    const bestMove = getBestMove(currentChess, "b", aiLevel);
     if (!bestMove) return;
     let move = null;
     try {
@@ -589,10 +778,10 @@ export default function GameRoom() {
     } else {
       setGame(nextGame);
     }
-  }, [onGameEnd]);
+  }, [onGameEnd, aiLevel]);
 
   function onPieceDrop(sourceSquare, targetSquare) {
-    if (!game || ended) return false;
+    if (!game || game.status !== "active" || ended) return false;
 
     const moves = chess.moves({ square: sourceSquare, verbose: true });
     const isLegal = moves.some((m) => m.to === targetSquare);
@@ -652,13 +841,23 @@ export default function GameRoom() {
     return true;
   }
 
-  const white = game?.players.white;
-  const black = game?.players.black;
+  const white = game?.players?.white ?? {
+    id: null,
+    username: lang === "ar" ? "الأبيض" : "White",
+    elo_rating: 0,
+    avatar: null
+  };
+  const black = game?.players?.black ?? {
+    id: null,
+    username: lang === "ar" ? "الأسود" : "Black",
+    elo_rating: 0,
+    avatar: null
+  };
   const turnLabel = game?.turn === "w" ? t("white") : t("black");
   const topPlayer = myColor === "white" ? black : white;
   const bottomPlayer = myColor === "white" ? white : black;
-  const topTimer = myColor === "white" ? game?.timers.black : game?.timers.white;
-  const bottomTimer = myColor === "white" ? game?.timers.white : game?.timers.black;
+  const topTimer = myColor === "white" ? (game?.timers?.black ?? 0) : (game?.timers?.white ?? 0);
+  const bottomTimer = myColor === "white" ? (game?.timers?.white ?? 0) : (game?.timers?.black ?? 0);
 
   return (
     <div className={`game-layout ${focusMode ? "is-focused" : ""}`}>
@@ -749,6 +948,7 @@ export default function GameRoom() {
             )}
           </div>
         </div>
+        <GameChat messages={chatMessages} onSend={handleSendGameChat} currentUserId={user?.id} />
         
         {!(ended || game?.status === "ended") && game?.status === "active" && isPlayer && (
           <>
@@ -756,7 +956,13 @@ export default function GameRoom() {
               <Flag size={18} />
               {t("resign")}
             </button>
-            <button className="primary" onClick={() => setShowReportModal(true)} style={{ width: "100%", marginTop: "8px" }}>
+            <button className="primary" onClick={() => {
+              setReportType("player");
+              if (topPlayer) {
+                setReportTargetId(topPlayer.invite_code || String(topPlayer.id || ""));
+              }
+              setShowReportModal(true);
+            }} style={{ width: "100%", marginTop: "8px" }}>
               <ShieldAlert size={18} />
               {lang === "ar" ? "إرسال بلاغ" : "Report issue"}
             </button>
@@ -765,37 +971,8 @@ export default function GameRoom() {
 
         {(ended || game?.status === "ended") && (
           <div className="game-result">
-            <strong>{(ended?.result || game?.result || "Ended")?.replace("_", " ")}</strong>
-            <span>{ended?.reason || game?.reason || ""}</span>
-          </div>
-        )}
-        {(matchAnalysis && (ended || game?.status === "ended")) && (
-          <div className="match-analysis" style={{ marginTop: 12 }}>
-            <h3 style={{ margin: "8px 0" }}>{lang === "ar" ? "تحليل المباراة" : "Match Analysis"}</h3>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <div className="analysis-player">
-                <strong>{white?.username || (lang === "ar" ? "الأبيض" : "White")}</strong>
-                <ul style={{ margin: "8px 0", paddingLeft: 18 }}>
-                  <li>{lang === "ar" ? "ممتاز:" : "Excellent:"} {matchAnalysis.white.excellent}</li>
-                  <li>{lang === "ar" ? "جيد:" : "Good:"} {matchAnalysis.white.good}</li>
-                  <li>{lang === "ar" ? "سيئ:" : "Bad:"} {matchAnalysis.white.bad}</li>
-                  <li>{lang === "ar" ? "حصان (N) حركات:" : "Knight moves:"} {matchAnalysis.white.knights}</li>
-                  <li>{lang === "ar" ? "قطع:" : "Captures:"} {matchAnalysis.white.captures}</li>
-                  <li>{lang === "ar" ? "نقاط مكتسبة:" : "Points gained:"} {matchAnalysis.white.points}</li>
-                </ul>
-              </div>
-              <div className="analysis-player">
-                <strong>{black?.username || (lang === "ar" ? "الأسود" : "Black")}</strong>
-                <ul style={{ margin: "8px 0", paddingLeft: 18 }}>
-                  <li>{lang === "ar" ? "ممتاز:" : "Excellent:"} {matchAnalysis.black.excellent}</li>
-                  <li>{lang === "ar" ? "جيد:" : "Good:"} {matchAnalysis.black.good}</li>
-                  <li>{lang === "ar" ? "سيئ:" : "Bad:"} {matchAnalysis.black.bad}</li>
-                  <li>{lang === "ar" ? "حصان (N) حركات:" : "Knight moves:"} {matchAnalysis.black.knights}</li>
-                  <li>{lang === "ar" ? "قطع:" : "Captures:"} {matchAnalysis.black.captures}</li>
-                  <li>{lang === "ar" ? "نقاط مكتسبة:" : "Points gained:"} {matchAnalysis.black.points}</li>
-                </ul>
-              </div>
-            </div>
+            <strong>{endInfo?.message || (ended?.result || game?.result || "Ended")?.replace("_", " ")}</strong>
+            <span>{endInfo?.reasonText || ended?.reason || game?.reason || ""}</span>
           </div>
         )}
       </aside>
@@ -841,7 +1018,7 @@ export default function GameRoom() {
               )}
             </div>
 
-            {endInfo.winnerColor ? (
+            {endInfo.winnerColor && (
               <div className="end-result-grid">
                 <div className="end-result-card winner">
                   <strong>{lang === "ar" ? "الفائز" : "Winner"}</strong>
@@ -858,19 +1035,37 @@ export default function GameRoom() {
                   </div>
                 </div>
               </div>
-            ) : (
-              <div className="end-result-grid" style={{ gap: 16 }}>
-                <div className="end-result-card" style={{ gridColumn: "1 / -1" }}>
-                  <strong>{lang === "ar" ? "تعادل" : "Draw"}</strong>
-                  <span>{lang === "ar" ? "المباراة انتهت بالتعادل" : "The match ended in a draw."}</span>
-                </div>
+            )}
+
+            {game?.matchId && game.matchId !== "computer" && (
+              <div className="end-analysis-summary" style={{ marginTop: 18, padding: 14, borderRadius: 12, background: "rgba(255,255,255,0.06)" }}>
+                <h3 style={{ margin: "0 0 10px" }}>{lang === "ar" ? "ملخص التحليل" : "Analysis Summary"}</h3>
+                {analysisLoading ? (
+                  <p>{lang === "ar" ? "جارٍ تحضير التحليل..." : "Preparing analysis..."}</p>
+                ) : analysisError ? (
+                  <p className="muted">{lang === "ar" ? "فشل تحميل التحليل." : "Failed to load analysis."}</p>
+                ) : endAnalysis ? (
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <div>{lang === "ar" ? "المحرك" : "Engine"}: {endAnalysis.engine?.name || "Stockfish"}</div>
+                    <div>{lang === "ar" ? "عمق" : "Depth"}: {endAnalysis.engine?.depth || 0}</div>
+                    <div>{lang === "ar" ? "المواقف" : "Positions"}: {endAnalysis.engine?.positionsAnalyzed || 0}</div>
+                    <div>{lang === "ar" ? "أفضل حركة أخيرة" : "Last recommended move"}: {endAnalysis.positions?.[endAnalysis.positions.length - 1]?.bestMove || "-"}</div>
+                  </div>
+                ) : (
+                  <p className="muted">{lang === "ar" ? "لا يوجد تحليل متاح حالياً." : "No analysis available yet."}</p>
+                )}
               </div>
             )}
 
-            <div className="end-modal-actions">
+            <div className="end-modal-actions" style={{ display: "grid", gap: 10 }}>
               <button className="primary" type="button" onClick={handleLeaveMatch}>
                 {lang === "ar" ? "العودة" : "Back"}
               </button>
+              {game?.matchId && game.matchId !== "computer" && (
+                <button className="primary" type="button" onClick={() => navigate(`/analysis?id=${game.matchId}`)}>
+                  {lang === "ar" ? "عرض التحليل الكامل" : "View full analysis"}
+                </button>
+              )}
             </div>
           </div>
         </div>

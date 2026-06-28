@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  Bell,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -10,23 +11,32 @@ import {
   History,
   Home,
   LogOut,
+  Menu,
+  Medal,
   Moon,
   Palette,
+  PieChart,
   Search,
   Share2,
   Sun,
   Trophy,
   User,
   Wallet,
-  ShieldAlert
+  ShieldAlert,
+  X,
+  Check,
+  Bot,
+  Brain,
+  Coins
 } from "lucide-react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import toast from "react-hot-toast";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useTheme } from "../context/ThemeContext.jsx";
 import { useSocket } from "../context/SocketContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { getAvatarSrc } from "../data/avatarOptions.js";
+import { api } from "../services/api.js";
 
 const supportPhone = "01026612375";
 
@@ -42,6 +52,7 @@ export default function AppLayout() {
   const { theme, toggleTheme, colorTheme, setColorTheme } = useTheme();
   const { lang, setLang, t } = useLanguage();
   const navigate = useNavigate();
+  const location = useLocation();
   const { socket } = useSocket();
 
   const [showSupportModal, setShowSupportModal] = useState(false);
@@ -50,15 +61,30 @@ export default function AppLayout() {
   const [incomingInvite, setIncomingInvite] = useState(null);
   const [pendingInviteId, setPendingInviteId] = useState(null);
   const [inviteMessage, setInviteMessage] = useState("");
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  const removeNotification = (id) => {
+    setNotifications((prev) => prev.filter((note) => note.id !== id));
+  };
+
+  const clearAllNotifications = () => {
+    setNotifications([]);
+  };
   const [showPalette, setShowPalette] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("gca_sidebar_collapsed") === "true");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navItems = useMemo(
     () => {
       const items = [
         { to: "/", label: t("dashboard"), icon: Home },
         { to: "/matchmaking", label: t("matchmaking"), icon: Search },
-        { to: "/leaderboard", label: t("leaderboard"), icon: Trophy },
+        { to: "/puzzles", label: lang === "ar" ? "الألغاز التكتيكية" : "Tactical Puzzles", icon: Brain },
+        { to: "/ai-coach", label: lang === "ar" ? "المدرب الذكي" : "AI Coach", icon: Bot },
+        { to: "/analysis", label: lang === "ar" ? "التحليل" : "Analysis", icon: PieChart },
+        { to: "/tournaments", label: t("tournaments"), icon: Trophy },
+        { to: "/leaderboard", label: t("leaderboard"), icon: Medal },
         { to: "/history", label: t("history"), icon: History },
         { to: "/profile", label: t("profile"), icon: User }
       ];
@@ -67,21 +93,39 @@ export default function AppLayout() {
       }
       return items;
     },
-    [t, user]
+    [t, user, lang]
   );
 
   useEffect(() => {
     if (!socket) return undefined;
 
     function onMatchFound({ roomId, color }) {
+      if (location.pathname === "/matchmaking") {
+        return;
+      }
       const colorText = color === "white" ? t("white") : t("black");
       toast.success(lang === "ar" ? `تم العثور على مباراة! ستلعب باللون ${colorText}.` : `Match found! You play as ${colorText}.`);
       navigate(`/game/${encodeURIComponent(roomId)}`, { state: { color } });
     }
 
+    function onAdminNotification(payload) {
+      if (!payload?.message) return;
+      const notification = {
+        id: Date.now(),
+        message: payload.message,
+        receivedAt: new Date().toLocaleTimeString()
+      };
+      setNotifications((items) => [notification, ...items].slice(0, 5));
+      toast(payload.message);
+    }
+
     socket.on("matchFound", onMatchFound);
-    return () => socket.off("matchFound", onMatchFound);
-  }, [socket, navigate, lang, t]);
+    socket.on("adminNotification", onAdminNotification);
+    return () => {
+      socket.off("matchFound", onMatchFound);
+      socket.off("adminNotification", onAdminNotification);
+    };
+  }, [socket, navigate, lang, t, location.pathname]);
 
   useEffect(() => {
     localStorage.setItem("gca_sidebar_collapsed", String(sidebarCollapsed));
@@ -191,11 +235,16 @@ export default function AppLayout() {
   }
 
   return (
-    <div className={sidebarCollapsed ? "app-shell sidebar-is-collapsed" : "app-shell"}>
-      <aside className="sidebar glass">
+    <div className={`app-shell${sidebarCollapsed ? " sidebar-is-collapsed" : ""}${mobileMenuOpen ? " mobile-menu-open" : ""}`}>
+      {mobileMenuOpen && <div className="mobile-menu-backdrop" onClick={() => setMobileMenuOpen(false)} />}
+      <aside className={`sidebar glass${mobileMenuOpen ? " mobile-open" : ""}`}>
         <div className="sidebar-head">
-          <div className="brand" onClick={() => navigate("/")}>
-            <Crown />
+          <div className="brand" onClick={() => {
+            navigate("/");
+            setMobileMenuOpen(false);
+          }}>
+
+            <Crown size={28} />
             <div>
               <strong>Global Chess</strong>
               <span>Arena</span>
@@ -210,12 +259,26 @@ export default function AppLayout() {
           >
             {sidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
           </button>
+          <button
+            aria-label={mobileMenuOpen ? (lang === "ar" ? "إغلاق القائمة" : "Close menu") : (lang === "ar" ? "فتح القائمة" : "Open menu")}
+            className="mobile-menu-toggle"
+            onClick={() => setMobileMenuOpen((value) => !value)}
+            type="button"
+          >
+            <Menu size={20} />
+          </button>
         </div>
 
         <nav>
           {navItems.map(({ to, label, icon: Icon }) => (
-            <NavLink key={to} to={to} className={({ isActive }) => (isActive ? "active" : "")} title={label}>
-              <Icon size={18} />
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) => (isActive ? "active" : "")}
+              title={label}
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              <Icon size={24} />
               <span>{label}</span>
             </NavLink>
           ))}
@@ -223,18 +286,18 @@ export default function AppLayout() {
 
         <div className="sidebar-block">
           <button className="primary support-btn" onClick={() => setShowSupportModal(true)} type="button">
-            <HandHeart size={16} />
+            <HandHeart size={20} />
             <span>{lang === "ar" ? "دعم مادي" : "Support"}</span>
           </button>
           <button className="primary support-btn" onClick={createInvite} type="button" style={{ marginTop: "8px" }}>
-            <Share2 size={16} />
+            <Share2 size={20} />
             <span>{t("invite")}</span>
           </button>
         </div>
 
         <div className="sidebar-block palette-block">
           <button onClick={() => setShowPalette(!showPalette)} className="icon-text theme-trigger-btn" type="button">
-            <Palette size={18} />
+            <Palette size={24} />
             <span>{t("boardThemes")}</span>
             {showPalette ? <ChevronUp className="chevron" size={16} /> : <ChevronDown className="chevron" size={16} />}
           </button>
@@ -261,27 +324,248 @@ export default function AppLayout() {
 
         <div className="sidebar-footer">
           <button className="icon-text" onClick={toggleTheme} type="button">
-            {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+            {theme === "dark" ? <Sun size={24} /> : <Moon size={24} />}
             <span>{theme === "dark" ? (lang === "ar" ? "نهاري" : "Light") : lang === "ar" ? "ليلي" : "Dark"}</span>
           </button>
           <button className="icon-text language-pill" onClick={() => setLang((value) => (value === "en" ? "ar" : "en"))} type="button">
-            <Globe2 size={18} />
+            <Globe2 size={24} />
             <span>{lang === "en" ? "AR" : "EN"}</span>
           </button>
           <button className="icon-text danger" onClick={logout} type="button">
-            <LogOut size={18} />
+            <LogOut size={24} />
             <span>{t("logout")}</span>
           </button>
         </div>
       </aside>
 
       <main className="main-content">
-        <header className="topbar glass">
-          <div>
-            <span className="eyebrow">{lang === "ar" ? "مرحبا بك" : "Welcome"}</span>
-            <h1>{user?.username}</h1>
+        <header className="topbar glass" style={{ position: "relative", overflow: "visible", zIndex: 1000 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <button
+              type="button"
+              className="mobile-menu-toggle"
+              onClick={() => setMobileMenuOpen((value) => !value)}
+              aria-label={mobileMenuOpen ? (lang === "ar" ? "إغلاق القائمة" : "Close menu") : (lang === "ar" ? "فتح القائمة" : "Open menu")}
+            >
+              <Menu size={20} />
+            </button>
+            <div>
+              <span className="eyebrow">{lang === "ar" ? "مرحبا بك" : "Welcome"}</span>
+              <h1 style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                {user?.username}
+                {(user?.role === "admin" || user?.is_premium === 1) ? (
+                  <Crown size={18} style={{ color: "#fbbf24", filter: "drop-shadow(0 0 4px rgba(251,191,36,0.5))" }} title="Premium Member" />
+                ) : (
+                  <button
+                    onClick={async () => {
+                      try {
+                        const res = await api("/premium/checkout", { method: "POST" });
+                        if (res.checkoutUrl) window.location.href = res.checkoutUrl;
+                      } catch (err) {
+                        toast.error(err.message);
+                      }
+                    }}
+                    style={{
+                      background: "rgba(251,191,36,0.15)",
+                      border: "1px solid rgba(251,191,36,0.4)",
+                      color: "#fbbf24",
+                      fontSize: "0.7rem",
+                      fontWeight: "800",
+                      padding: "2px 8px",
+                      borderRadius: "20px",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "4px"
+                    }}
+                  >
+                    <Crown size={10} />
+                    <span>{lang === "ar" ? "ترقية" : "Go Premium"}</span>
+                  </button>
+                )}
+              </h1>
+            </div>
           </div>
-          <div className="avatar">{user?.avatar ? <img src={getAvatarSrc(user.avatar)} alt="" /> : user?.username?.[0]}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {user && (
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginRight: "10px" }}>
+                {/* Level Badge */}
+                <div style={{
+                  background: "rgba(255, 255, 255, 0.05)",
+                  border: "1px solid rgba(255, 255, 255, 0.1)",
+                  padding: "6px 12px",
+                  borderRadius: "12px",
+                  fontSize: "0.85rem",
+                  fontWeight: "800",
+                  color: "#fff",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px"
+                }}>
+                  <span>Lv.</span>
+                  <span style={{ color: "var(--accent)" }}>{user.level ?? 1}</span>
+                </div>
+
+                {/* Coins Counter */}
+                <div style={{
+                  background: "rgba(251, 191, 36, 0.08)",
+                  border: "1px solid rgba(251, 191, 36, 0.25)",
+                  padding: "6px 12px",
+                  borderRadius: "12px",
+                  fontSize: "0.85rem",
+                  fontWeight: "800",
+                  color: "#fbbf24",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px"
+                }}>
+                  <Coins size={14} style={{ color: "#fbbf24" }} />
+                  <span>{user.coins ?? 0}</span>
+                </div>
+              </div>
+            )}
+            <button
+              type="button"
+              className="icon-text"
+              onClick={() => setShowNotifications((value) => !value)}
+              style={{ position: "relative", minWidth: 44, justifyContent: "center" }}
+            >
+              <Bell size={18} />
+              {notifications.length > 0 && (
+                <span
+                  style={{
+                    position: "absolute",
+                    top: 4,
+                    right: 4,
+                    width: 16,
+                    height: 16,
+                    borderRadius: "50%",
+                    background: "var(--accent)",
+                    color: "white",
+                    fontSize: "0.65rem",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center"
+                  }}
+                >
+                  {notifications.length}
+                </span>
+              )}
+            </button>
+            <div className="avatar">{user?.avatar ? <img src={getAvatarSrc(user.avatar)} alt="" /> : user?.username?.[0]}</div>
+          </div>
+          {showNotifications && (
+            <div
+              className="notification-dropdown glass"
+              style={{
+                position: "absolute",
+                top: "100%",
+                right: 12,
+                width: 320,
+                maxHeight: 320,
+                overflowY: "auto",
+                padding: 12,
+                borderRadius: 12,
+                boxShadow: "0 28px 60px rgba(0,0,0,0.18)",
+                zIndex: 1100
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <strong style={{ fontSize: "1rem", color: "var(--text)" }}>{lang === "ar" ? "الإشعارات" : "Notifications"}</strong>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  {notifications.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={clearAllNotifications}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: "var(--accent)",
+                        fontSize: "0.8rem",
+                        cursor: "pointer",
+                        fontWeight: "600",
+                        padding: "2px 6px",
+                        borderRadius: "4px"
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.textDecoration = "underline"}
+                      onMouseLeave={(e) => e.currentTarget.style.textDecoration = "none"}
+                    >
+                      {lang === "ar" ? "مسح الكل" : "Clear all"}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      padding: 4,
+                      color: "var(--text)",
+                      display: "flex",
+                      alignItems: "center"
+                    }}
+                    onClick={() => setShowNotifications(false)}
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                </div>
+              </div>
+              {notifications.length === 0 ? (
+                <p className="muted" style={{ margin: 0 }}>
+                  {lang === "ar" ? "لا توجد إشعارات جديدة" : "No new notifications"}
+                </p>
+              ) : (
+                notifications.map((note) => (
+                  <div
+                    key={note.id}
+                    style={{
+                      padding: "12px",
+                      borderRadius: "10px",
+                      background: "var(--input-bg)",
+                      border: "1px solid var(--line)",
+                      marginBottom: 8,
+                      position: "relative",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 4
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                      <div style={{ fontSize: "0.9rem", color: "var(--text)", lineHeight: "1.3", flex: 1 }}>{note.message}</div>
+                      <button
+                        type="button"
+                        onClick={() => removeNotification(note.id)}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          cursor: "pointer",
+                          padding: 4,
+                          color: "var(--text-muted)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          borderRadius: "50%",
+                          transition: "all 0.2s ease",
+                          flexShrink: 0
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.1)";
+                          e.currentTarget.style.color = "#ff4d4d";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = "transparent";
+                          e.currentTarget.style.color = "var(--text-muted)";
+                        }}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                    <small style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>{note.receivedAt}</small>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
         </header>
         <Outlet />
       </main>
@@ -335,7 +619,7 @@ export default function AppLayout() {
               {t("inviteTargetLabel")}
               <input
                 value={targetInviteCode}
-                onChange={(event) => setTargetInviteCode(event.target.value.replace(/\D/g, "").slice(0,6))}
+                onChange={(event) => setTargetInviteCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
                 placeholder={t("inviteEnterId") || "185977"}
                 maxLength={6}
                 inputMode="numeric"
@@ -371,27 +655,6 @@ export default function AppLayout() {
           </div>
         </div>
       )}
-      <footer className="app-footer glass" style={{ padding: "8px 12px", textAlign: "center", fontSize: "0.95rem" }}>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-          <span>Game developed by</span>
-          <a
-            href="https://www.linkedin.com/in/zizo-elsadany-718223375/?utm_source=share&utm_campaign=share_via&utm_content=profile&utm_medium=android_app"
-            target="_blank"
-            rel="noreferrer"
-            style={{ fontWeight: 600, color: "#1e90ff" }}
-          >
-            Abd Elaziz Elsadiny
-          </a>
-          <a
-            href="https://zizo-portfolio-omega.vercel.app/"
-            target="_blank"
-            rel="noreferrer"
-            style={{ fontSize: "0.85rem", marginTop: 2, color: "#1e90ff" }}
-          >
-            Portfolio
-          </a>
-        </div>
-      </footer>
     </div>
   );
 }

@@ -1,7 +1,7 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, useCallback } from "react";
 import toast from "react-hot-toast";
 import { getStoredUser, getToken, setSession } from "../services/api.js";
-import { fetchMe, loginUser, logoutUser, registerUser } from "../services/auth.js";
+import { fetchMe, loginUser, logoutUser, registerUser, googleLoginUser } from "../services/auth.js";
 
 const AuthContext = createContext(null);
 
@@ -9,6 +9,17 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(getStoredUser());
   const [token, setToken] = useState(getToken());
   const [loading, setLoading] = useState(Boolean(getToken()));
+
+  const refreshUser = useCallback(async () => {
+    if (!token) return;
+    try {
+      const { user: freshUser } = await fetchMe();
+      setUser(freshUser);
+      setSession({ token, user: freshUser });
+    } catch (err) {
+      console.error("Failed to refresh user:", err);
+    }
+  }, [token]);
 
   useEffect(() => {
     if (!token) return setLoading(false);
@@ -37,6 +48,12 @@ export function AuthProvider({ children }) {
         setToken(data.token);
         toast.success("Welcome back");
       },
+      async googleLogin(credential) {
+        const data = await googleLoginUser(credential);
+        setUser(data.user);
+        setToken(data.token);
+        toast.success("Welcome via Google");
+      },
       async register(payload) {
         const data = await registerUser(payload);
         if (!data.user?.id) {
@@ -54,9 +71,10 @@ export function AuthProvider({ children }) {
         setUser(null);
         setToken(null);
       },
-      setUser
+      setUser,
+      refreshUser
     }),
-    [loading, token, user]
+    [loading, token, user, refreshUser]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

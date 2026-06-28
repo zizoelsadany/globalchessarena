@@ -28,13 +28,15 @@ export function getStoredUser() {
 
 export async function api(path, options = {}) {
   const token = getToken();
+  const headers = {
+    ...(options.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...options.headers
+  };
+
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers
-    }
+    headers
   });
 
   const data = await response.json().catch(() => ({}));
@@ -48,4 +50,12 @@ export async function api(path, options = {}) {
     throw new Error(details || data.message || "Request failed");
   }
   return data;
+}
+
+export function normalizeAssetUrl(url) {
+  if (!url) return "";
+  if (/^(https?:|data:|blob:)/.test(url)) return url;
+
+  const origin = new URL(API_URL, typeof window !== "undefined" ? window.location.origin : "").origin;
+  return url.startsWith("/") ? `${origin}${url}` : url;
 }
