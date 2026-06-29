@@ -1,0 +1,16 @@
+# Robots.txt for Global Chess Arena
+# Optimized for Global Search Engines (Google, Bing, Yahoo, Yandex, Baidu)
+
+User-agent: *
+Allow: /
+
+# Exclude private, admin, and authentication flow routes from indexing
+Disallow: /admin/
+Disallow: /admin/*
+Disallow: /checkout-mock
+Disallow: /verify-otp
+Disallow: /forgot-password
+Disallow: /join-invite/*
+
+# Specify the sitemap location for search engines
+Sitemap: https://globalchessarena.com/sitemap.xml

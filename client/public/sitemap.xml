@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <!-- Main Dashboard -->
+  <url>
+    <loc>https://globalchessarena.com/</loc>
+    <lastmod>2026-06-29</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <!-- Matchmaking Page -->
+  <url>
+    <loc>https://globalchessarena.com/matchmaking</loc>
+    <lastmod>2026-06-29</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <!-- Leaderboard -->
+  <url>
+    <loc>https://globalchessarena.com/leaderboard</loc>
+    <lastmod>2026-06-29</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <!-- Tournaments -->
+  <url>
+    <loc>https://globalchessarena.com/tournaments</loc>
+    <lastmod>2026-06-29</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <!-- Chess Puzzles -->
+  <url>
+    <loc>https://globalchessarena.com/puzzles</loc>
+    <lastmod>2026-06-29</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <!-- AI Chess Coach -->
+  <url>
+    <loc>https://globalchessarena.com/ai-coach</loc>
+    <lastmod>2026-06-29</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <!-- Quests & Challenges -->
+  <url>
+    <loc>https://globalchessarena.com/quests</loc>
+    <lastmod>2026-06-29</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <!-- In-game Shop -->
+  <url>
+    <loc>https://globalchessarena.com/shop</loc>
+    <lastmod>2026-06-29</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <!-- Match Analysis -->
+  <url>
+    <loc>https://globalchessarena.com/analysis</loc>
+    <lastmod>2026-06-29</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+</urlset>
