@@ -1,6 +1,6 @@
 import { pool } from "../config/db.js";
 import { listAllUsers, deleteUserById, banUserById, unbanUserById, findUserById } from "../models/User.js";
-import { listAllMatches, countMatches, getMatchById } from "../models/Match.js";
+import { listAllMatches, countMatches, getMatchById, deleteMatch } from "../models/Match.js";
 import { listReports, updateReportStatus, countOpenReports } from "../models/Report.js";
 import { listNotifications, createNotification } from "../models/Notification.js";
 import { listTournaments, createTournament, updateTournament, deleteTournament, createTournamentMatch, getTournamentById } from "../models/Tournament.js";
@@ -342,3 +342,258 @@ export async function deleteAllAnalyses(req, res, next) {
     next(error);
   }
 }
+
+export async function getPendingPayments(req, res, next) {
+  try {
+    const [rows] = await pool.execute(`
+      SELECT p.*, u.username, u.email 
+      FROM payments p
+      JOIN users u ON p.user_id = u.id
+      ORDER BY p.created_at DESC
+      LIMIT 100
+    `);
+    res.json({ payments: rows });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function approvePayment(req, res, next) {
+  try {
+    const paymentId = req.params.id;
+
+    // Get payment details
+    const [payments] = await pool.execute(
+      "SELECT user_id, amount, coins_amount FROM payments WHERE id = :id",
+      { id: paymentId }
+    );
+
+    if (payments.length === 0) return res.status(404).json({ message: "Payment not found" });
+    const payment = payments[0];
+
+    // Update payment status to completed
+    await pool.execute(
+      "UPDATE payments SET status = 'completed' WHERE id = :id",
+      { id: paymentId }
+    );
+
+    const coinsNum = Number(payment.coins_amount) || 0;
+
+    if (coinsNum > 0) {
+      // Award Coins
+      await pool.execute(
+        "UPDATE users SET coins = coins + :coinsAmount WHERE id = :userId",
+        { coinsAmount: coinsNum, userId: payment.user_id }
+      );
+
+      // Notify player via socket
+      const io = getSocketServer();
+      if (io) {
+        io.to(`user:${payment.user_id}`).emit("adminNotification", {
+          id: `coins-approved-${Date.now()}`,
+          message: `تمت الموافقة على دفعتك وإضافة ${coinsNum} عملة إلى حسابك! / Your payment has been approved and ${coinsNum} coins added to your account!`,
+          createdAt: new Date().toISOString()
+        });
+      }
+      res.json({ success: true, message: `Payment approved. Credited ${coinsNum} coins to player.` });
+    } else {
+      // Update user to premium
+      await pool.execute(
+        "UPDATE users SET is_premium = 1 WHERE id = :userId",
+        { userId: payment.user_id }
+      );
+
+      // Send Premium Activation Email
+      try {
+        const [users] = await pool.execute(
+          "SELECT username, email FROM users WHERE id = :userId",
+          { userId: payment.user_id }
+        );
+        if (users.length > 0) {
+          const user = users[0];
+          const { sendPremiumActivationEmail } = await import("../services/emailService.js");
+          await sendPremiumActivationEmail(user.email, user.username);
+        }
+      } catch (emailErr) {
+        console.error("Failed to send activation email:", emailErr);
+      }
+      res.json({ success: true, message: "Payment approved and user upgraded to premium." });
+    }
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function declinePayment(req, res, next) {
+  try {
+    const paymentId = req.params.id;
+
+    // Update payment status to failed
+    await pool.execute(
+      "UPDATE payments SET status = 'failed' WHERE id = :id",
+      { id: paymentId }
+    );
+
+    res.json({ success: true, message: "Payment declined successfully." });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function distributeCoins(req, res, next) {
+  try {
+    const adminId = req.user.id;
+    const targetUserId = req.params.id;
+    const { amount } = req.body;
+
+    const coinsAmount = Number(amount);
+    if (isNaN(coinsAmount) || coinsAmount <= 0) {
+      return res.status(400).json({ message: "Invalid amount / كمية غير صالحة" });
+    }
+
+    // 1. Get admin's current coins balance
+    const [adminRows] = await pool.execute(
+      "SELECT coins FROM users WHERE id = :adminId",
+      { adminId }
+    );
+    if (adminRows.length === 0) {
+      return res.status(404).json({ message: "Admin not found" });
+    }
+    const adminCoins = adminRows[0].coins;
+
+    if (adminCoins < coinsAmount) {
+      return res.status(400).json({ 
+        message: `Insufficient coins in admin balance. You have ${adminCoins} coins. / رصيد عملاتك غير كافٍ. لديك ${adminCoins} عملة.`
+      });
+    }
+
+    // 2. Verify target user exists
+    const [userRows] = await pool.execute(
+      "SELECT id, username, coins FROM users WHERE id = :targetUserId",
+      { targetUserId }
+    );
+    if (userRows.length === 0) {
+      return res.status(404).json({ message: "Target user not found / المستخدم غير موجود" });
+    }
+    const targetUser = userRows[0];
+
+    // 3. Deduct from admin and add to target user
+    const newAdminCoins = adminCoins - coinsAmount;
+    const newUserCoins = Number(targetUser.coins) + coinsAmount;
+
+    await pool.execute(
+      "UPDATE users SET coins = :newAdminCoins WHERE id = :adminId",
+      { newAdminCoins, adminId }
+    );
+
+    await pool.execute(
+      "UPDATE users SET coins = :newUserCoins WHERE id = :targetUserId",
+      { newUserCoins, targetUserId }
+    );
+
+    // Create a notification for the receiver
+    const receiveMsg = `لقد تلقيت ${coinsAmount} عملة معدنية من المشرف! / You received ${coinsAmount} coins from the admin!`;
+    const io = getSocketServer();
+    if (io) {
+      io.to(`user:${targetUserId}`).emit("adminNotification", {
+        id: `coins-received-${Date.now()}`,
+        message: receiveMsg,
+        createdAt: new Date().toISOString()
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `Successfully transferred ${coinsAmount} coins to ${targetUser.username}. / تم تحويل ${coinsAmount} عملة إلى ${targetUser.username} بنجاح.`,
+      adminCoins: newAdminCoins
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function deleteMatchAdmin(req, res, next) {
+  try {
+    const matchId = req.params.id;
+    await deleteMatch(matchId);
+    // Also try delete from archived_matches
+    await pool.execute("DELETE FROM archived_matches WHERE id = :matchId", { matchId });
+
+    res.json({ success: true, message: "Match deleted successfully / تم حذف المباراة بنجاح." });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function deductCoins(req, res, next) {
+  try {
+    const adminId = req.user.id;
+    const targetUserId = req.params.id;
+    const { amount } = req.body;
+
+    const coinsAmount = Number(amount);
+    if (isNaN(coinsAmount) || coinsAmount <= 0) {
+      return res.status(400).json({ message: "Invalid amount / كمية غير صالحة" });
+    }
+
+    // 1. Verify target user exists
+    const [userRows] = await pool.execute(
+      "SELECT id, username, coins FROM users WHERE id = :targetUserId",
+      { targetUserId }
+    );
+    if (userRows.length === 0) {
+      return res.status(404).json({ message: "Target user not found / المستخدم غير موجود" });
+    }
+    const targetUser = userRows[0];
+
+    if (targetUser.coins < coinsAmount) {
+      return res.status(400).json({
+        message: `Target user only has ${targetUser.coins} coins. You cannot deduct ${coinsAmount} coins. / المستخدم لديه فقط ${targetUser.coins} عملة. لا يمكنك سحب ${coinsAmount} عملة.`
+      });
+    }
+
+    // 2. Get admin's current coins balance
+    const [adminRows] = await pool.execute(
+      "SELECT coins FROM users WHERE id = :adminId",
+      { adminId }
+    );
+    if (adminRows.length === 0) {
+      return res.status(404).json({ message: "Admin not found" });
+    }
+    const adminCoins = adminRows[0].coins;
+
+    // 3. Deduct from target user and return back to admin
+    const newAdminCoins = adminCoins + coinsAmount;
+    const newUserCoins = Number(targetUser.coins) - coinsAmount;
+
+    await pool.execute(
+      "UPDATE users SET coins = :newAdminCoins WHERE id = :adminId",
+      { newAdminCoins, adminId }
+    );
+
+    await pool.execute(
+      "UPDATE users SET coins = :newUserCoins WHERE id = :targetUserId",
+      { newUserCoins, targetUserId }
+    );
+
+    // Create a notification for the receiver
+    const receiveMsg = `تم سحب ${coinsAmount} عملة معدنية من حسابك بواسطة المشرف! / ${coinsAmount} coins were withdrawn from your account by the admin!`;
+    const io = getSocketServer();
+    if (io) {
+      io.to(`user:${targetUserId}`).emit("adminNotification", {
+        id: `coins-withdrawn-${Date.now()}`,
+        message: receiveMsg,
+        createdAt: new Date().toISOString()
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `Successfully withdrew ${coinsAmount} coins from ${targetUser.username}. / تم سحب ${coinsAmount} عملة من ${targetUser.username} بنجاح.`,
+      adminCoins: newAdminCoins
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+

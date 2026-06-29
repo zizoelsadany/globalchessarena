@@ -2,7 +2,8 @@ import { api } from "./api.js";
 
 export async function trackVisit() {
   try {
-    await fetch(import.meta.env.VITE_API_URL.replace("/api", "") + "/api/track-visit", { method: "POST" });
+    const apiUrl = import.meta.env.VITE_API_URL || "/api";
+    await fetch(apiUrl.replace("/api", "") + "/api/track-visit", { method: "POST" });
   } catch (_) {
     // silently fail - non critical
   }
@@ -112,3 +113,35 @@ export async function deleteAnalysis(analysisId) {
 export async function deleteAllAnalyses() {
   return api("/admin/analyses", { method: "DELETE" });
 }
+
+export async function fetchPendingPayments() {
+  const data = await api("/admin/payments");
+  return Array.isArray(data.payments) ? data.payments : [];
+}
+
+export async function approvePayment(paymentId) {
+  return api(`/admin/payments/${paymentId}/approve`, { method: "POST" });
+}
+
+export async function declinePayment(paymentId) {
+  return api(`/admin/payments/${paymentId}/decline`, { method: "POST" });
+}
+
+export async function distributeCoins(userId, amount) {
+  return api(`/admin/users/${userId}/distribute-coins`, {
+    method: "POST",
+    body: JSON.stringify({ amount })
+  });
+}
+
+export async function deleteMatch(matchId) {
+  return api(`/admin/matches/${matchId}`, { method: "DELETE" });
+}
+
+export async function deductCoins(userId, amount) {
+  return api(`/admin/users/${userId}/deduct-coins`, {
+    method: "POST",
+    body: JSON.stringify({ amount })
+  });
+}
+

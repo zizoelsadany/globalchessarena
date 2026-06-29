@@ -3,8 +3,9 @@ import { io } from "socket.io-client";
 import toast from "react-hot-toast";
 import { useAuth } from "./AuthContext.jsx";
 
+const isLocalhost = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
 const defaultSocketHost = `${window.location.protocol}//${window.location.hostname}:5000`;
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || (import.meta.env.PROD ? window.location.origin : defaultSocketHost);
+const SOCKET_URL = isLocalhost ? "http://localhost:5000" : (import.meta.env.VITE_SOCKET_URL || (import.meta.env.PROD ? window.location.origin : defaultSocketHost));
 const SocketContext = createContext(null);
 
 export function SocketProvider({ children }) {

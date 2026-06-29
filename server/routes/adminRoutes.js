@@ -16,7 +16,13 @@ import {
   resetSiteVisits,
   getAnalyses,
   deleteAnalysis,
-  deleteAllAnalyses
+  deleteAllAnalyses,
+  getPendingPayments,
+  approvePayment,
+  declinePayment,
+  distributeCoins,
+  deleteMatchAdmin,
+  deductCoins
 } from "../controllers/adminController.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireAdmin } from "../middleware/admin.js";
@@ -55,6 +61,8 @@ router.delete("/users/:id", deleteUser);
 router.post("/users/:id/ban", banUser);
 router.post("/users/:id/unban", unbanUser);
 router.post("/users/:id/toggle-premium", toggleUserPremium);
+router.post("/users/:id/distribute-coins", distributeCoins);
+router.post("/users/:id/deduct-coins", deductCoins);
 router.get("/reports", getReports);
 router.patch("/reports/:id", validate(reportStatusSchema), resolveReport);
 router.post("/notifications", validate(notificationSchema), createAdminNotification);
@@ -76,5 +84,10 @@ router.post("/dashboard/reset-visits", resetSiteVisits);
 router.get("/analyses", getAnalyses);
 router.delete("/analyses/:id", deleteAnalysis);
 router.delete("/analyses", deleteAllAnalyses);
+
+router.get("/payments", getPendingPayments);
+router.post("/payments/:id/approve", approvePayment);
+router.post("/payments/:id/decline", declinePayment);
+router.delete("/matches/:id", deleteMatchAdmin);
 
 export default router;

@@ -24,6 +24,9 @@ import AICoach from "./pages/AICoach.jsx";
 import Puzzles from "./pages/Puzzles.jsx";
 import CheckoutMock from "./pages/CheckoutMock.jsx";
 import AdminAnalyses from "./pages/AdminAnalyses.jsx";
+import AdminPayments from "./pages/AdminPayments.jsx";
+import Quests from "./pages/Quests.jsx";
+import Shop from "./pages/Shop.jsx";
 
 export default function App() {
   return (
@@ -46,12 +49,15 @@ export default function App() {
           <Route path="/tournament/:id" element={<TournamentDetails />} />
           <Route path="/puzzles" element={<Puzzles />} />
           <Route path="/ai-coach" element={<AICoach />} />
+          <Route path="/quests" element={<Quests />} />
+          <Route path="/shop" element={<Shop />} />
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/admin/users" element={<AdminUsers />} />
           <Route path="/admin/reports" element={<AdminReports />} />
           <Route path="/admin/notifications" element={<AdminNotifications />} />
           <Route path="/admin/tournaments" element={<TournamentManagement />} />
           <Route path="/admin/analyses" element={<AdminAnalyses />} />
+          <Route path="/admin/payments" element={<AdminPayments />} />
           <Route path="/join-invite/:token" element={<JoinInvite />} />
         </Route>
       </Route>

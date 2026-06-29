@@ -2,9 +2,12 @@ import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { z } from "zod";
 import { createUser, findUserByEmail, findUserWithPasswordById, setUserOtp, verifyUser, updateUserProfile, findUserByUsername } from "../models/User.js";
+import { createPendingUser, findPendingUserByEmail, findPendingUserByUsername, deletePendingUserByEmail, updatePendingUserOtp } from "../models/PendingUser.js";
 import { signToken } from "../utils/tokens.js";
 import { OAuth2Client } from "google-auth-library";
 import { sendWelcomeEmail, sendOtpEmail, sendForgotPasswordEmail } from "../services/emailService.js";
+import jwt from "jsonwebtoken";
+import { env } from "../config/env.js";
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID || "940530069798-btep8vnv8d38hakcjp8237higegtqfll.apps.googleusercontent.com");
 
@@ -14,38 +17,67 @@ const avatarSchema = z
   .optional()
   .or(z.literal(""));
 
+const blockedDomains = [
+  "gmal.co", "gmal.com", "gamil.com", "gamil.co", "gmail.co", "gmail.con", "gmal.con", "gamil.con",
+  "hotmal.com", "hotamil.com", "hotmial.com", "hotmail.co",
+  "yaho.com", "yahoo.co",
+  "outlok.com", "outlook.co"
+];
+
+export const emailSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .email("البريد الإلكتروني غير صالح / Invalid email address")
+  .max(255)
+  .refine(
+    (val) => /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(val),
+    {
+      message: "نطاق البريد الإلكتروني غير صالح (يجب أن يكون الامتداد حرفين على الأقل مثل .com) / Invalid email domain (TLD must be at least 2 characters, e.g. .com)"
+    }
+  )
+  .refine(
+    (val) => {
+      const domain = val.split("@")[1];
+      return !blockedDomains.includes(domain);
+    },
+    {
+      message: "خطأ إملائي في البريد الإلكتروني / Check email spelling"
+    }
+  );
+
 export const registerSchema = z.object({
   username: z
     .string()
     .trim()
     .min(3)
-    .max(32)
-    .regex(/^[\p{L}\p{N}_]+$/u, "Use letters, numbers, or underscores only"),
-  email: z.string().trim().email().max(255),
+    .max(16)
+    .regex(/^[a-zA-Z0-9_]+$/, "Username must contain only English letters, numbers, or underscores (3-16 characters) / يجب أن يحتوي اسم المستخدم على حروف إنجليزية، أرقام أو شرطة سفلية فقط (3-16 حرف)"),
+  email: emailSchema,
   password: z.string().min(8).max(128),
   avatar: avatarSchema
 });
 
 export const loginSchema = z.object({
-  email: z.string().trim().email(),
+  email: emailSchema,
   password: z.string().min(1)
 });
 
 export const verifyOtpSchema = z.object({
-  email: z.string().trim().email(),
+  email: emailSchema,
   otp: z.string().length(6, "OTP must be exactly 6 digits")
 });
 
 export const resendOtpSchema = z.object({
-  email: z.string().trim().email()
+  email: emailSchema
 });
 
 export const forgotPasswordSchema = z.object({
-  email: z.string().trim().email()
+  email: emailSchema
 });
 
 export const resetPasswordSchema = z.object({
-  email: z.string().trim().email(),
+  email: emailSchema,
   otp: z.string().length(6, "OTP must be exactly 6 digits"),
   newPassword: z.string().min(8).max(128)
 });
@@ -64,19 +96,37 @@ export async function register(req, res, next) {
     const otpCode = String(Math.floor(100000 + Math.random() * 900000));
     const otpExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
-    const user = await createUser({
+    const pendingUser = await createPendingUser({
       username: req.body.username,
       email: req.body.email,
       passwordHash,
       avatar: req.body.avatar || null,
-      is_verified: 0,
-      otp_code: otpCode,
-      otp_expires_at: otpExpiresAt
+      otpCode,
+      otpExpiresAt
     });
 
-    await sendOtpEmail(user.email, user.username, otpCode);
+    await sendOtpEmail(pendingUser.email, pendingUser.username, otpCode);
 
-    res.status(201).json({ user: { ...user, hasPassword: true }, token: signToken(user) });
+    // Create a temporary token for the pending user so frontend can load VerifyOtp page safely
+    const tempToken = jwt.sign({ sub: `pending:${pendingUser.id}`, username: pendingUser.username }, env.jwtSecret, {
+      expiresIn: env.jwtExpiresIn
+    });
+
+    const mockUserPayload = {
+      id: `pending:${pendingUser.id}`,
+      username: pendingUser.username,
+      email: pendingUser.email,
+      avatar: pendingUser.avatar,
+      is_verified: 0,
+      is_premium: 0,
+      level: 1,
+      xp: 0,
+      coins: 0,
+      role: "player",
+      status: "active"
+    };
+
+    res.status(201).json({ user: { ...mockUserPayload, hasPassword: true }, token: tempToken });
   } catch (error) {
     if (error.code === "ER_DUP_ENTRY") {
       if (error.message.includes("email")) {
@@ -139,6 +189,14 @@ export async function googleLogin(req, res, next) {
 
     let user = await findUserByEmail(email);
     if (!user) {
+      // Resolve username collision if any
+      let baseUsername = username;
+      let counter = 1;
+      while (await findUserByUsername(username) || await findPendingUserByUsername(username)) {
+        username = `${baseUsername.substring(0, 12)}_${counter}`;
+        counter++;
+      }
+
       // Create user if not exists
       user = await createUser({
         username: username,
@@ -171,29 +229,54 @@ export async function googleLogin(req, res, next) {
 export async function verifyOtp(req, res, next) {
   try {
     const { email, otp } = req.body;
-    const user = await findUserByEmail(email);
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    if (user.is_verified) {
-      return res.json({ message: "Account is already verified", user });
+    
+    // Check if the user is already fully registered in the main users table
+    const registeredUser = await findUserByEmail(email);
+    if (registeredUser) {
+      if (registeredUser.is_verified) {
+        return res.json({ message: "Account is already verified", user: registeredUser, token: signToken(registeredUser) });
+      }
+      // If by some chance there's an unverified user in the main database, we handle it too:
+      if (registeredUser.otp_code === otp) {
+        const expiry = new Date(registeredUser.otp_expires_at);
+        if (expiry >= new Date()) {
+          await verifyUser(registeredUser.id);
+          sendWelcomeEmail(registeredUser.email, registeredUser.username);
+          const updatedUser = await findUserByEmail(email);
+          return res.json({ message: "Account verified successfully", user: updatedUser, token: signToken(updatedUser) });
+        }
+      }
     }
 
-    if (!user.otp_code || user.otp_code !== otp) {
+    // Otherwise, check the pending_users table
+    const pendingUser = await findPendingUserByEmail(email);
+    if (!pendingUser) return res.status(404).json({ message: "User not found" });
+
+    if (pendingUser.otp_code !== otp) {
       return res.status(400).json({ message: "Invalid verification code" });
     }
 
-    const expiry = new Date(user.otp_expires_at);
+    const expiry = new Date(pendingUser.otp_expires_at);
     if (expiry < new Date()) {
       return res.status(400).json({ message: "Verification code has expired" });
     }
 
-    await verifyUser(user.id);
+    // Now, create the user in the main users table
+    const user = await createUser({
+      username: pendingUser.username,
+      email: pendingUser.email,
+      passwordHash: pendingUser.password,
+      avatar: pendingUser.avatar,
+      is_verified: 1
+    });
+
+    // Delete the pending record
+    await deletePendingUserByEmail(email);
     
     // Send welcome email after they are verified!
     sendWelcomeEmail(user.email, user.username);
 
-    const updatedUser = await findUserByEmail(email);
-    res.json({ message: "Account verified successfully", user: updatedUser, token: signToken(updatedUser) });
+    res.json({ message: "Account verified successfully", user, token: signToken(user) });
   } catch (error) {
     next(error);
   }
@@ -202,18 +285,21 @@ export async function verifyOtp(req, res, next) {
 export async function resendOtp(req, res, next) {
   try {
     const { email } = req.body;
-    const user = await findUserByEmail(email);
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    if (user.is_verified) {
+    
+    const registeredUser = await findUserByEmail(email);
+    if (registeredUser && registeredUser.is_verified) {
       return res.status(400).json({ message: "Account is already verified" });
     }
+
+    // Find pending user
+    const pendingUser = await findPendingUserByEmail(email);
+    if (!pendingUser) return res.status(404).json({ message: "User not found" });
 
     const otpCode = String(Math.floor(100000 + Math.random() * 900000));
     const otpExpiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
 
-    await setUserOtp(email, otpCode, otpExpiresAt);
-    await sendOtpEmail(email, user.username, otpCode);
+    await updatePendingUserOtp(email, otpCode, otpExpiresAt);
+    await sendOtpEmail(email, pendingUser.username, otpCode);
 
     res.json({ message: "Verification code resent successfully" });
   } catch (error) {

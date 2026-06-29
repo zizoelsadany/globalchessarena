@@ -128,6 +128,21 @@ async function main() {
       await connection.execute(`ALTER TABLE users ADD COLUMN coins INT NOT NULL DEFAULT 0`);
     }
 
+    // Ensure pending_users table exists
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS pending_users (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        username VARCHAR(32) NOT NULL UNIQUE,
+        email VARCHAR(255) NOT NULL UNIQUE,
+        password VARCHAR(255) NOT NULL,
+        avatar VARCHAR(500) NULL,
+        otp_code VARCHAR(6) NOT NULL,
+        otp_expires_at DATETIME NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log("Verified pending_users table exists.");
+
     console.log("All database migrations verified and applied.");
   } catch (error) {
     console.error("Failed to create database schema:", error);

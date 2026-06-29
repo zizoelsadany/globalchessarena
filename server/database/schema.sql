@@ -148,9 +148,15 @@ CREATE TABLE IF NOT EXISTS payments (
   currency VARCHAR(10) NOT NULL DEFAULT 'USD',
   status VARCHAR(50) NOT NULL,
   stripe_session_id VARCHAR(255) NULL,
+  receipt_url VARCHAR(500) NULL,
+  sender_number VARCHAR(50) NULL,
+  transaction_id VARCHAR(100) NULL,
+  payment_method VARCHAR(50) NOT NULL DEFAULT 'manual',
+  coins_amount INT NOT NULL DEFAULT 0,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
+
 
 CREATE TABLE IF NOT EXISTS user_puzzle_attempts (
   id INT AUTO_INCREMENT PRIMARY KEY,
@@ -165,7 +171,19 @@ CREATE TABLE IF NOT EXISTS user_analysis_requests (
   user_id INT NOT NULL,
   match_id INT NOT NULL,
   requested_at DATE NOT NULL,
-  is_deleted TINYINT(1) DEFAULT 0,
+  
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS pending_users (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  username VARCHAR(32) NOT NULL UNIQUE,
+  email VARCHAR(255) NOT NULL UNIQUE,
+  password VARCHAR(255) NOT NULL,
+  avatar VARCHAR(500) NULL,
+  otp_code VARCHAR(6) NOT NULL,
+  otp_expires_at DATETIME NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 

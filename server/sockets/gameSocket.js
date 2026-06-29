@@ -214,6 +214,24 @@ async function endGame(io, game, result, reason = "finished") {
     ]);
   }
 
+  // Update quest progress for players
+  try {
+    const { updateQuestProgress } = await import("../services/questService.js");
+    await updateQuestProgress(game.players.white.id, "play_match");
+    await updateQuestProgress(game.players.black.id, "play_match");
+
+    if (winner) {
+      await updateQuestProgress(winner, "win_match");
+      if (winner === game.players.white.id) {
+        await updateQuestProgress(winner, "win_white");
+      } else if (winner === game.players.black.id) {
+        await updateQuestProgress(winner, "win_black");
+      }
+    }
+  } catch (questErr) {
+    console.error("Failed to update quest progress for end game:", questErr);
+  }
+
   // Award level and EXP to the tournament match winner
   if (game.tournamentId && winner) {
     try {
@@ -244,7 +262,7 @@ export function configureSockets(httpServer) {
   const io = new Server(httpServer, {
     cors: {
       origin: (origin, callback) => {
-        if (!origin || allowedSocketOrigins.has(origin)) {
+        if (!origin || allowedSocketOrigins.has(origin) || origin.endsWith(".trycloudflare.com")) {
           return callback(null, true);
         }
         callback(new Error("Not allowed by CORS"));

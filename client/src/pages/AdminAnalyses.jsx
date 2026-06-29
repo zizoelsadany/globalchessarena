@@ -99,14 +99,14 @@ export default function AdminAnalyses() {
           <tbody>
             {analyses.map((analysis) => (
               <tr key={analysis.id}>
-                <td>#{analysis.id}</td>
-                <td>
+                <td data-label="ID">#{analysis.id}</td>
+                <td data-label={lang === "ar" ? "المستخدم" : "User"}>
                   <div style={{ display: "flex", flexDirection: "column" }}>
                     <strong style={{ color: "var(--text)" }}>{analysis.username || (lang === "ar" ? "مستخدم غير معروف" : "Unknown User")}</strong>
                     <span style={{ fontSize: "0.75rem", color: "var(--muted)" }}>{analysis.email}</span>
                   </div>
                 </td>
-                <td>
+                <td data-label={lang === "ar" ? "المباراة" : "Match"}>
                   <div style={{ display: "flex", flexDirection: "column" }}>
                     <span>Match #{analysis.match_id}</span>
                     <span style={{ fontSize: "0.75rem", color: "var(--accent)" }}>
@@ -114,11 +114,11 @@ export default function AdminAnalyses() {
                     </span>
                   </div>
                 </td>
-                <td>
+                <td data-label={lang === "ar" ? "التاريخ" : "Requested At"}>
                   {analysis.requested_at ? new Date(analysis.requested_at).toLocaleDateString() : "-"}
                 </td>
-                <td>
-                  <div style={{ display: "flex", gap: "10px" }}>
+                <td data-label={lang === "ar" ? "إجراءات" : "Actions"}>
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
                     <a
                       href={`/game/match/${analysis.match_id}`}
                       target="_blank"

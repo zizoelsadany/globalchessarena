@@ -37,6 +37,8 @@ const translations = {
     white: "White",
     black: "Black",
     waiting: "Waiting",
+    lastMove: "Last Move",
+    showLastMove: "Show Last Move",
     check: "Check",
     resign: "Resign",
     movesHistory: "Moves History",
@@ -113,7 +115,10 @@ const translations = {
     noTournaments: "No tournaments available right now.",
     events: "Events",
     active: "Active",
-    upcoming: "Upcoming"
+    upcoming: "Upcoming",
+    footerRights: "All rights reserved © 2026",
+    footerCreatedBy: "The game was made by",
+    footerPortfolio: "Portfolio"
   },
   ar: {
     dashboard: "لوحة التحكم",
@@ -149,6 +154,8 @@ const translations = {
     white: "الأبيض",
     black: "الأسود",
     waiting: "انتظار",
+    lastMove: "الحركة الأخيرة",
+    showLastMove: "عرض الحركة الأخيرة",
     check: "كش",
     resign: "انسحاب",
     movesHistory: "سجل النقلات",
@@ -226,7 +233,10 @@ const translations = {
     noTournaments: "لا توجد بطولات متاحة حالياً.",
     events: "الفعاليات",
     active: "نشط",
-    upcoming: "قادم"
+    upcoming: "قادم",
+    footerRights: "كل الحقوق محفوظة © 2026",
+    footerCreatedBy: "العبة اتعملت بواسطة",
+    footerPortfolio: "بورتفوليو"
   }
 };
 

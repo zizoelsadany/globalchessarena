@@ -1,5 +1,5 @@
 import { pool } from "../config/db.js";
-import { transporter, fromEmail } from "./emailService.js";
+import { sendMailWithHeaders } from "./emailService.js";
 
 /**
  * Inserts an email into the database queue for asynchronous delivery.
@@ -41,8 +41,7 @@ export async function processQueue() {
       );
 
       try {
-        await transporter.sendMail({
-          from: fromEmail,
+        await sendMailWithHeaders({
           to: email.to_email,
           subject: email.subject,
           html: email.html

@@ -30,3 +30,16 @@ export const tournamentUpload = multer({
     cb(null, true);
   }
 });
+
+export const receiptUpload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // Max 5MB
+  fileFilter: (req, file, cb) => {
+    const allowed = [".png", ".jpg", ".jpeg", ".webp", ".gif"];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!allowed.includes(ext)) {
+      return cb(new Error("Receipt must be an image (PNG, JPG, JPEG, WEBP, or GIF)"));
+    }
+    cb(null, true);
+  }
+});

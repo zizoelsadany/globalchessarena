@@ -20,16 +20,38 @@ const modalStyles = `
   .analysis-match-row.is-selected { background:var(--accent-glow); border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-glow-ring); }
 
   .match-players-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:6px; }
-  .pc-white { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:20px; font-weight:700; font-size:0.8rem; background:var(--item-bg); border:1px solid var(--line); color:var(--text); }
-  .pc-black { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:20px; font-weight:700; font-size:0.8rem; background:#1e1e28; border:1px solid rgba(100,100,130,0.4); color:#d0d0e0; }
+  .pc-white { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:20px; font-weight:700; font-size:0.8rem; background:var(--item-bg); border:1px solid var(--line); color:var(--text); max-width:130px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pc-black { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:20px; font-weight:700; font-size:0.8rem; background:#1e1e28; border:1px solid rgba(100,100,130,0.4); color:#d0d0e0; max-width:130px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .pc-vs { font-size:0.72rem; color:var(--muted); font-weight:600; }
-  .match-result-badge { font-size:0.72rem; font-weight:700; padding:3px 9px; border-radius:20px; white-space:nowrap; margin-left:auto; }
+  .match-result-badge { font-size:0.72rem; font-weight:700; padding:3px 9px; border-radius:20px; white-space:nowrap; margin-inline-start:auto; }
   .badge-white { background:var(--bg-soft); border:1px solid var(--line); color:var(--text); }
   .badge-black { background:#1e1e28; border:1px solid rgba(100,100,130,0.4); color:#c8c8d8; }
   .badge-draw { background:rgba(99,102,241,0.2); color:#a5b4fc; }
   .badge-ongoing { background:rgba(16,185,129,0.15); color:#6ee7b7; }
   .match-row-time { font-size:0.75rem; opacity:0.6; margin-top:2px; color:var(--muted); }
   .computer-badge { font-size:0.72rem; opacity:0.75; }
+
+  @media (max-width: 480px) {
+    .match-players-row {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 6px;
+    }
+    .pc-white, .pc-black {
+      max-width: 100%;
+      justify-content: center;
+    }
+    .pc-vs {
+      text-align: center;
+    }
+    .match-result-badge {
+      grid-column: span 3;
+      margin: 4px auto 0 !important;
+      width: fit-content;
+    }
+  }
+
 
   .players-duel-banner { display:flex; align-items:stretch; gap:12px; margin:16px 0; }
   .player-banner { flex:1; display:flex; flex-direction:column; align-items:center; padding:18px 12px; border-radius:14px; gap:6px; text-align:center; }
@@ -200,15 +222,27 @@ export default function MatchAnalysis() {
       const userColor = localMatch.userColor || (localMatch.white_username === user.username ? "white" : "black");
 
       for (const [index, mv] of (localMatch.moves || []).entries()) {
-        const player = mv.color;
-        if (mv.piece === "n") stats[player].knights += 1;
-        if (mv.captured) stats[player].captures += 1;
-        moveHistory.push({
-          ...mv,
-          moveNumber: Math.ceil((index + 1) / 2),
-          color: mv.color,
-          notation: mv.move_notation
-        });
+        try {
+          const move = chess.move(mv.move_notation, { sloppy: true });
+          if (!move) continue;
+          const player = move.color === "w" ? "white" : "black";
+          moveHistory.push({
+            ...mv,
+            moveNumber: Math.ceil((index + 1) / 2),
+            color: player,
+            notation: mv.move_notation
+          });
+
+          if (move.piece === "n") stats[player].knights += 1;
+          if (move.captured) stats[player].captures += 1;
+          const after = evaluateBoard(chess, move.color);
+          if (after > 30) stats[player].excellent += 1;
+          else if (after > 5) stats[player].good += 1;
+          else if (after < -5) stats[player].bad += 1;
+          stats[player].points += Math.round(after);
+        } catch (e) {
+          continue;
+        }
       }
 
       setAnalysis({ match: localMatch, moves: localMatch.moves || [], stockfish: null, moveHistory, userColor, stats });

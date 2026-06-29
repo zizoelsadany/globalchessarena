@@ -411,10 +411,10 @@ export default function TournamentDetails() {
               ) : (
                 matches.map((match) => (
                   <tr key={match.id} className={isUserMatchPlayer(match) ? "is-player-row" : ""}>
-                    <td>{match.white_username} ({match.white_elo})</td>
-                    <td>{match.black_username} ({match.black_elo})</td>
-                    <td>{formatDate(match.scheduled_time, true)}</td>
-                    <td>{match.winner_username ? `${match.winner_username} ${lang === "ar" ? "فاز" : "won"}` : labels.inProgress}</td>
+                    <td data-label={labels.white}>{match.white_username} ({match.white_elo})</td>
+                    <td data-label={labels.black}>{match.black_username} ({match.black_elo})</td>
+                    <td data-label={labels.scheduled}>{formatDate(match.scheduled_time, true)}</td>
+                    <td data-label={labels.result}>{match.winner_username ? `${match.winner_username} ${lang === "ar" ? "فاز" : "won"}` : labels.inProgress}</td>
                   </tr>
                 ))
               )}

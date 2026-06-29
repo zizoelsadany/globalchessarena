@@ -1,14 +1,46 @@
 import nodemailer from "nodemailer";
 
-export const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.EMAIL_USER || "your_email@gmail.com",
-    pass: process.env.EMAIL_PASS || "your_app_password"
-  }
-});
+// Support both easy "service" config and custom SMTP hosts for better delivery rates
+export const transporter = nodemailer.createTransport(
+  process.env.EMAIL_SERVICE 
+    ? {
+        service: process.env.EMAIL_SERVICE,
+        auth: {
+          user: process.env.EMAIL_USER || "your_email@gmail.com",
+          pass: process.env.EMAIL_PASS || "your_app_password"
+        }
+      }
+    : {
+        host: process.env.EMAIL_HOST || "smtp.gmail.com",
+        port: parseInt(process.env.EMAIL_PORT) || 465,
+        secure: process.env.EMAIL_SECURE !== "false", // true for 465, false for 587
+        auth: {
+          user: process.env.EMAIL_USER || "your_email@gmail.com",
+          pass: process.env.EMAIL_PASS || "your_app_password"
+        }
+      }
+);
 
-export const fromEmail = `"Global Chess Arena" <${process.env.EMAIL_USER || "no-reply@chessarena.com"}>`;
+export const fromEmail = process.env.EMAIL_USER 
+  ? `"Global Chess Arena" <${process.env.EMAIL_USER}>` 
+  : `"Global Chess Arena" <no-reply@chessarena.com>`;
+
+// Reusable function that appends standard anti-spam & transactional headers
+export async function sendMailWithHeaders({ to, subject, html }) {
+  if (!to) return;
+  return transporter.sendMail({
+    from: fromEmail,
+    to,
+    subject,
+    html,
+    headers: {
+      "X-Auto-Response-Suppress": "OOF, AutoReply, DR, NDR, RN, NRN",
+      "X-Priority": "3", // Normal priority
+      "Priority": "normal",
+      "Precedence": "list" // Indicates individual transactional communication
+    }
+  });
+}
 
 export async function sendWelcomeEmail(toEmail, username) {
   const subject = "Welcome to Global Chess Arena! ♟️";
@@ -22,7 +54,7 @@ export async function sendWelcomeEmail(toEmail, username) {
 
   try {
     if (toEmail) {
-      await transporter.sendMail({ from: fromEmail, to: toEmail, subject, html });
+      await sendMailWithHeaders({ to: toEmail, subject, html });
     }
   } catch (error) {
     console.error("Failed to send welcome email:", error);
@@ -66,7 +98,7 @@ export async function sendOtpEmail(toEmail, username, otpCode) {
 
   try {
     if (toEmail) {
-      await transporter.sendMail({ from: fromEmail, to: toEmail, subject, html });
+      await sendMailWithHeaders({ to: toEmail, subject, html });
     }
   } catch (error) {
     console.error("Failed to send OTP verification email:", error);
@@ -89,7 +121,7 @@ export async function sendForgotPasswordEmail(toEmail, username, otpCode) {
 
   try {
     if (toEmail) {
-      await transporter.sendMail({ from: fromEmail, to: toEmail, subject, html });
+      await sendMailWithHeaders({ to: toEmail, subject, html });
     }
   } catch (error) {
     console.error("Failed to send forgot password email:", error);

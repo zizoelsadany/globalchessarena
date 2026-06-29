@@ -9,8 +9,10 @@ import {
   getPuzzles,
   solvePuzzle,
   createCheckout,
-  verifyCheckout
+  verifyCheckout,
+  createManualPayment
 } from "../controllers/premiumController.js";
+import { receiptUpload } from "../middleware/upload.js";
 
 const router = Router();
 
@@ -30,5 +32,6 @@ router.post("/puzzles/solve", requireAuth, solvePuzzle);
 // Payments
 router.post("/checkout", requireAuth, createCheckout);
 router.post("/checkout/verify", requireAuth, verifyCheckout);
+router.post("/checkout/manual", requireAuth, receiptUpload.single("receipt"), createManualPayment);
 
 export default router;

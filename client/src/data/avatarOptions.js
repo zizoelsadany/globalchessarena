@@ -23,6 +23,11 @@ const rook = '<path d="M39 35h10v10h9V35h14v10h9V35h10v22H84v31H46V57h-7V35Z" fi
 const pawn = '<path d="M60 31a16 16 0 0 1 8 30l12 27H40l12-27a16 16 0 0 1 8-30Z" fill="#fff" opacity=".92"/>';
 const bishop = '<path d="M60 26c14 13 19 24 9 37l13 25H38l13-25c-10-13-5-24 9-37Z" fill="#fff" opacity=".92"/>';
 const queen = '<path d="M32 49a9 9 0 1 1 13-8l12 25 12-25a9 9 0 1 1 12 8l-8 35H47l-8-35Z" fill="#fff" opacity=".92"/>';
+
+// Premium avatars shapes
+const king = '<path d="M37 78h46l-4 9H41l-4-9Zm2-4a14 14 0 0 1 10-22l5-16h-7v-5h7v-6h5v6h7v5h-7l5 16a14 14 0 0 1 10 22H39Z" fill="#fff" opacity=".95"/>';
+const wizard = '<path d="M30 80l10-30L48 20l5 10l5-10l8 24L78 80H30Zm28-52c-3 4-7 10-8 17h16c-1-7-4-13-8-17Z" fill="#fff" opacity=".95"/>';
+
 const smile = '<path d="M49 74c6 7 16 7 22 0" fill="none" stroke="#171717" stroke-width="5" stroke-linecap="round" opacity=".55"/>';
 const focus = '<circle cx="50" cy="58" r="4" fill="#171717" opacity=".55"/><circle cx="70" cy="58" r="4" fill="#171717" opacity=".55"/>';
 
@@ -35,12 +40,17 @@ export const avatarOptions = [
   { id: "queen", name: "Queen", label: { en: "Queen", ar: "الملكة" }, src: avatarSvg({ bg: ["#7c2d12", "#f97316"], accent: "#ffedd5", shape: queen, face: smile }) }
 ];
 
+export const shopAvatars = {
+  avatar_king: { id: "avatar_king", name: "Royal King", label: { en: "Royal King", ar: "الملك الملكي" }, src: avatarSvg({ bg: ["#1e1b4b", "#4f46e5"], accent: "#fbbf24", shape: king, face: focus }) },
+  avatar_wizard: { id: "avatar_wizard", name: "Chess Wizard", label: { en: "Chess Wizard", ar: "ساحر الشطرنج" }, src: avatarSvg({ bg: ["#311042", "#8b5cf6"], accent: "#06b6d4", shape: wizard, face: smile }) }
+};
+
 export function getAvatarSrc(value) {
-  const option = avatarOptions.find((avatar) => avatar.id === value || avatar.src === value);
+  const option = [...avatarOptions, ...Object.values(shopAvatars)].find((avatar) => avatar.id === value || avatar.src === value);
   return option?.src || value;
 }
 
 export function normalizeAvatarValue(value) {
-  const option = avatarOptions.find((avatar) => avatar.id === value || avatar.src === value);
+  const option = [...avatarOptions, ...Object.values(shopAvatars)].find((avatar) => avatar.id === value || avatar.src === value);
   return option?.id || value || "";
 }

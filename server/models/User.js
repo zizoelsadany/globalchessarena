@@ -2,32 +2,32 @@ import { pool } from "../config/db.js";
 
 const publicFields = "id, username, email, elo_rating, avatar, invite_code, role, status, is_verified, is_premium, level, xp, coins, created_at";
 
- function generateRandomSixDigitCode() {
-   return String(Math.floor(Math.random() * 1000000)).padStart(6, "0");
- }
- 
- async function generateUniqueInviteCode() {
-   let code;
-   let attempts = 0;
-   do {
-     code = generateRandomSixDigitCode();
-     const [rows] = await pool.execute("SELECT 1 FROM users WHERE invite_code = :inviteCode LIMIT 1", { inviteCode: code });
-     if (!rows.length) return code;
-     attempts += 1;
-   } while (attempts < 10);
-   throw new Error("Unable to generate a unique user code. Please try again.");
- }
- 
- export async function createUser({ username, email, passwordHash, avatar, role = "player", is_verified = 0, otp_code = null, otp_expires_at = null }) {
-   const invite_code = await generateUniqueInviteCode();
-   const [result] = await pool.execute(
-     "INSERT INTO users (username, email, password, avatar, role, invite_code, is_verified, otp_code, otp_expires_at) VALUES (:username, :email, :password, :avatar, :role, :invite_code, :is_verified, :otp_code, :otp_expires_at)",
-     { username, email, password: passwordHash, avatar: avatar || null, role, invite_code, is_verified, otp_code, otp_expires_at }
-   );
-   return findUserById(result.insertId);
- }
- 
- export async function findUserByEmail(email) {
+function generateRandomSixDigitCode() {
+  return String(Math.floor(Math.random() * 1000000)).padStart(6, "0");
+}
+
+async function generateUniqueInviteCode() {
+  let code;
+  let attempts = 0;
+  do {
+    code = generateRandomSixDigitCode();
+    const [rows] = await pool.execute("SELECT 1 FROM users WHERE invite_code = :inviteCode LIMIT 1", { inviteCode: code });
+    if (!rows.length) return code;
+    attempts += 1;
+  } while (attempts < 10);
+  throw new Error("Unable to generate a unique user code. Please try again.");
+}
+
+export async function createUser({ username, email, passwordHash, avatar, role = "player", is_verified = 0, otp_code = null, otp_expires_at = null }) {
+  const invite_code = await generateUniqueInviteCode();
+  const [result] = await pool.execute(
+    "INSERT INTO users (username, email, password, avatar, role, invite_code, is_verified, otp_code, otp_expires_at) VALUES (:username, :email, :password, :avatar, :role, :invite_code, :is_verified, :otp_code, :otp_expires_at)",
+    { username, email, password: passwordHash, avatar: avatar || null, role, invite_code, is_verified, otp_code, otp_expires_at }
+  );
+  return findUserById(result.insertId);
+}
+
+export async function findUserByEmail(email) {
   const [rows] = await pool.execute("SELECT * FROM users WHERE email = :email LIMIT 1", { email });
   return rows[0] || null;
 }
@@ -86,7 +86,7 @@ export async function unbanUserById(id) {
 export async function updateUserProfile(id, { username, email, password, avatar }) {
   const updates = [];
   const params = { id };
-  
+
   if (username !== undefined) { updates.push("username = :username"); params.username = username || null; }
   if (email !== undefined) { updates.push("email = :email"); params.email = email; }
   if (password !== undefined) { updates.push("password = :password"); params.password = password; }

@@ -42,11 +42,11 @@ export default function MatchHistory() {
           <tbody>
             {matches.map((match) => (
               <tr key={match.id}>
-                <td>{match.white_username}</td>
-                <td>{match.black_username}</td>
-                <td>{formatResult(match.result)}</td>
-                <td>{match.winner_username || "-"}</td>
-                <td>{match.end_time ? new Date(match.end_time).toLocaleString(lang === "ar" ? "ar-EG" : "en-US") : "-"}</td>
+                <td data-label={t("white")}>{match.white_username}</td>
+                <td data-label={t("black")}>{match.black_username}</td>
+                <td data-label={t("result")}>{formatResult(match.result)}</td>
+                <td data-label={lang === "ar" ? "الفائز" : "Winner"}>{match.winner_username || "-"}</td>
+                <td data-label={lang === "ar" ? "تاريخ الانتهاء" : "Ended"}>{match.end_time ? new Date(match.end_time).toLocaleString(lang === "ar" ? "ar-EG" : "en-US") : "-"}</td>
               </tr>
             ))}
           </tbody>

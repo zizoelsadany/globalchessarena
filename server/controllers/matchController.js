@@ -119,3 +119,32 @@ export async function removeMatch(req, res, next) {
     next(error);
   }
 }
+
+export async function createComputerMatch(req, res, next) {
+  try {
+    const userId = req.user.id;
+    const { result, reason } = req.body;
+
+    // 1. Find the Computer user ID
+    const [botRows] = await pool.execute("SELECT id FROM users WHERE username = 'Computer' LIMIT 1");
+    if (botRows.length === 0) {
+      return res.status(500).json({ message: "Computer bot user not found in database" });
+    }
+    const computerId = botRows[0].id;
+
+    // 2. Insert match record
+    const [matchResult] = await pool.execute(
+      "INSERT INTO matches (white_player, black_player, result, reason, end_time) VALUES (:whitePlayer, :blackPlayer, :result, :reason, UTC_TIMESTAMP())",
+      { 
+        whitePlayer: userId, 
+        blackPlayer: computerId, 
+        result: result || null, 
+        reason: reason || null 
+      }
+    );
+
+    res.json({ success: true, matchId: matchResult.insertId });
+  } catch (error) {
+    next(error);
+  }
+}

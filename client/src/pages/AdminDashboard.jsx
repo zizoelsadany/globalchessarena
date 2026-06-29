@@ -3,13 +3,26 @@ import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
 import { ShieldAlert, Users, Flag, Bell, Trophy, Eye } from "lucide-react";
 import { useLanguage } from "../context/LanguageContext.jsx";
-import { fetchAdminDashboard, banUser, unbanUser, deleteUser, resolveReport, broadcastNotification, resetSiteVisits } from "../services/admin.js";
+import { fetchAdminDashboard, banUser, unbanUser, deleteUser, resolveReport, broadcastNotification, resetSiteVisits, deleteMatch } from "../services/admin.js";
 
 export default function AdminDashboard() {
   const { lang } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [dashboard, setDashboard] = useState(null);
   const [notificationText, setNotificationText] = useState("");
+
+  const handleDeleteMatch = async (matchId) => {
+    if (!window.confirm(lang === "ar" ? "هل أنت متأكد من رغبتك في حذف هذه المباراة؟" : "Are you sure you want to delete this match?")) {
+      return;
+    }
+    try {
+      await deleteMatch(matchId);
+      await refreshDashboard();
+      toast.success(lang === "ar" ? "تم حذف المباراة بنجاح" : "Match deleted successfully");
+    } catch (error) {
+      toast.error(error.message);
+    }
+  };
 
   useEffect(() => {
     fetchAdminDashboard()
@@ -89,6 +102,12 @@ export default function AdminDashboard() {
       title: lang === "ar" ? "التحليلات" : "Analyses",
       description: lang === "ar" ? "عرض وحذف طلبات تحليل المباريات التي تمت بواسطة المستخدمين." : "View and delete game analysis requests triggered by users.",
       to: "/admin/analyses"
+    },
+    {
+      key: "payments",
+      title: lang === "ar" ? "الاشتراكات اليدوية" : "Manual Payments",
+      description: lang === "ar" ? "مراجعة إيصالات دفع الاشتراكات اليدوية وتفعيل حسابات الأعضاء المميزين." : "Review manual payment screenshots and activate premium memberships.",
+      to: "/admin/payments"
     }
   ];
 
@@ -158,6 +177,7 @@ export default function AdminDashboard() {
                 <th>{lang === "ar" ? "الأسود" : "Black"}</th>
                 <th>{lang === "ar" ? "النتيجة" : "Result"}</th>
                 <th>{lang === "ar" ? "الفائز" : "Winner"}</th>
+                <th>{lang === "ar" ? "إجراءات" : "Actions"}</th>
               </tr>
             </thead>
             <tbody>
@@ -172,11 +192,20 @@ export default function AdminDashboard() {
                     </span>
                   </td>
                   <td>{match.winner_username || "-"}</td>
+                  <td>
+                    <button
+                      className="danger-btn"
+                      onClick={() => handleDeleteMatch(match.id)}
+                      style={{ padding: "4px 8px", fontSize: "0.8rem", minHeight: "auto" }}
+                    >
+                      {lang === "ar" ? "حذف" : "Delete"}
+                    </button>
+                  </td>
                 </tr>
               ))}
               {dashboard.matches.length === 0 && (
                 <tr>
-                  <td colSpan="5" style={{ textAlign: "center", padding: "1rem" }}>
+                  <td colSpan="6" style={{ textAlign: "center", padding: "1rem" }}>
                     {lang === "ar" ? "لا توجد مباريات بعد" : "No matches yet"}
                   </td>
                 </tr>

@@ -27,7 +27,10 @@ import {
   Check,
   Bot,
   Brain,
-  Coins
+  Coins,
+  Flame,
+  ShoppingBag,
+  Award
 } from "lucide-react";
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import toast from "react-hot-toast";
@@ -56,6 +59,38 @@ export default function AppLayout() {
   const { socket } = useSocket();
 
   const [showSupportModal, setShowSupportModal] = useState(false);
+  const [purchasedItems, setPurchasedItems] = useState([]);
+
+  useEffect(() => {
+    if (user) {
+      api("/gamification/shop")
+        .then(data => {
+          setPurchasedItems(data.purchasedItems || []);
+        })
+        .catch(err => console.error("Error loading purchased items:", err));
+    }
+  }, [user, location.pathname]);
+
+  const ownedThemes = useMemo(() => {
+    return purchasedItems
+      .filter(item => item.item_type === "board_theme")
+      .map(item => item.item_value);
+  }, [purchasedItems]);
+
+  const hasVipBadge = useMemo(() => {
+    return purchasedItems.some(item => item.item_type === "badge" && item.item_value === "vip");
+  }, [purchasedItems]);
+
+  const availableThemes = useMemo(() => {
+    const list = [...boardThemes];
+    if (ownedThemes.includes("golden")) {
+      list.push({ id: "golden", color: "#fbbf24", label: { en: "Golden", ar: "ذهبي" } });
+    }
+    if (ownedThemes.includes("neon")) {
+      list.push({ id: "neon", color: "#06b6d4", label: { en: "Neon", ar: "نيون" } });
+    }
+    return list;
+  }, [ownedThemes]);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [targetInviteCode, setTargetInviteCode] = useState("");
   const [incomingInvite, setIncomingInvite] = useState(null);
@@ -82,6 +117,8 @@ export default function AppLayout() {
         { to: "/matchmaking", label: t("matchmaking"), icon: Search },
         { to: "/puzzles", label: lang === "ar" ? "الألغاز التكتيكية" : "Tactical Puzzles", icon: Brain },
         { to: "/ai-coach", label: lang === "ar" ? "المدرب الذكي" : "AI Coach", icon: Bot },
+        { to: "/quests", label: lang === "ar" ? "المهام اليومية" : "Daily Quests", icon: Flame },
+        { to: "/shop", label: lang === "ar" ? "المتجر" : "Shop", icon: ShoppingBag },
         { to: "/analysis", label: lang === "ar" ? "التحليل" : "Analysis", icon: PieChart },
         { to: "/tournaments", label: t("tournaments"), icon: Trophy },
         { to: "/leaderboard", label: t("leaderboard"), icon: Medal },
@@ -269,6 +306,34 @@ export default function AppLayout() {
           </button>
         </div>
 
+        {user && (
+          <div className="sidebar-profile-widget">
+            <div className="sidebar-profile-avatar-wrap">
+              <div className="avatar sm">
+                {user.avatar ? <img src={getAvatarSrc(user.avatar)} alt="" /> : user.username?.[0]}
+              </div>
+              {(user.role === "admin" || user.is_premium === 1) && (
+                <span className="sidebar-profile-crown" title="Premium">
+                  <Crown size={10} />
+                </span>
+              )}
+            </div>
+            <div className="sidebar-profile-info">
+              <strong className="sidebar-profile-name">{user.username}</strong>
+              <span className="sidebar-profile-elo">🏆 {user.elo_rating ?? 0} Elo</span>
+              <div className="sidebar-profile-stats">
+                <span className="sidebar-profile-stat-badge level">
+                  Lv. {user.level ?? 1}
+                </span>
+                <span className="sidebar-profile-stat-badge coins">
+                  <Coins size={12} />
+                  {user.coins ?? 0}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
         <nav>
           {navItems.map(({ to, label, icon: Icon }) => (
             <NavLink
@@ -283,6 +348,42 @@ export default function AppLayout() {
             </NavLink>
           ))}
         </nav>
+
+        {!(user?.role === "admin" || user?.is_premium === 1) && (
+          <div className="sidebar-block" style={{ paddingBottom: 0 }}>
+            <button 
+              className="primary premium-btn" 
+              onClick={async () => {
+                try {
+                  const res = await api("/premium/checkout", { method: "POST" });
+                  if (res.checkoutUrl) window.location.href = res.checkoutUrl;
+                } catch (err) {
+                  toast.error(err.message);
+                }
+              }}
+              type="button"
+              style={{
+                background: "linear-gradient(135deg, #fbbf24, #d97706)",
+                color: "#000",
+                fontWeight: "800",
+                boxShadow: "0 4px 15px rgba(251, 191, 36, 0.35)",
+                border: "none",
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                width: "100%",
+                justifyContent: "center",
+                padding: "10px 14px",
+                borderRadius: "10px",
+                cursor: "pointer",
+                transition: "all 0.3s ease"
+              }}
+            >
+              <Crown size={20} />
+              <span>{lang === "ar" ? "اشترك في بريميوم" : "Go Premium"}</span>
+            </button>
+          </div>
+        )}
 
         <div className="sidebar-block">
           <button className="primary support-btn" onClick={() => setShowSupportModal(true)} type="button">
@@ -304,7 +405,7 @@ export default function AppLayout() {
 
           {showPalette && (
             <div className="palette-popover glass">
-              {boardThemes.map((themeOption) => (
+              {availableThemes.map((themeOption) => (
                 <button
                   aria-label={themeOption.label[lang]}
                   className={colorTheme === themeOption.id ? "theme-dot is-selected" : "theme-dot"}
@@ -339,7 +440,7 @@ export default function AppLayout() {
       </aside>
 
       <main className="main-content">
-        <header className="topbar glass" style={{ position: "relative", overflow: "visible", zIndex: 1000 }}>
+        <header className="topbar glass">
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <button
               type="button"
@@ -351,8 +452,11 @@ export default function AppLayout() {
             </button>
             <div>
               <span className="eyebrow">{lang === "ar" ? "مرحبا بك" : "Welcome"}</span>
-              <h1 style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                {user?.username}
+              <h1 style={{ display: "flex", alignItems: "center", gap: "8px", margin: 0 }}>
+                <span className="topbar-username">{user?.username}</span>
+                {hasVipBadge && (
+                  <Award size={18} style={{ color: "#fbbf24", filter: "drop-shadow(0 0 4px rgba(251,191,36,0.5))" }} title="VIP Player" />
+                )}
                 {(user?.role === "admin" || user?.is_premium === 1) ? (
                   <Crown size={18} style={{ color: "#fbbf24", filter: "drop-shadow(0 0 4px rgba(251,191,36,0.5))" }} title="Premium Member" />
                 ) : (
@@ -365,6 +469,7 @@ export default function AppLayout() {
                         toast.error(err.message);
                       }
                     }}
+                    className="topbar-premium-btn"
                     style={{
                       background: "rgba(251,191,36,0.15)",
                       border: "1px solid rgba(251,191,36,0.4)",
@@ -388,16 +493,16 @@ export default function AppLayout() {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             {user && (
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginRight: "10px" }}>
+              <div className="topbar-stats-desktop" style={{ display: "flex", alignItems: "center", gap: "8px", marginRight: "10px" }}>
                 {/* Level Badge */}
                 <div style={{
-                  background: "rgba(255, 255, 255, 0.05)",
-                  border: "1px solid rgba(255, 255, 255, 0.1)",
+                  background: "var(--input-bg)",
+                  border: "1px solid var(--line)",
                   padding: "6px 12px",
                   borderRadius: "12px",
                   fontSize: "0.85rem",
                   fontWeight: "800",
-                  color: "#fff",
+                  color: "var(--text)",
                   display: "flex",
                   alignItems: "center",
                   gap: "4px"
@@ -568,6 +673,33 @@ export default function AppLayout() {
           )}
         </header>
         <Outlet />
+        <footer className="app-footer">
+          <div className="footer-content">
+            <span className="footer-rights">{t("footerRights")}</span>
+            <div className="footer-links">
+              <span>
+                {t("footerCreatedBy")}{" "}
+                <a
+                  href="https://www.linkedin.com/in/zizo-elsadany-718223375/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="footer-link-highlight"
+                >
+                  Abd Elaziz Elsadany
+                </a>
+              </span>
+              <span className="footer-separator">|</span>
+              <a
+                href="https://zizo-portfolio-omega.vercel.app/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="footer-link-highlight"
+              >
+                {t("footerPortfolio")}
+              </a>
+            </div>
+          </div>
+        </footer>
       </main>
 
       {showSupportModal && (

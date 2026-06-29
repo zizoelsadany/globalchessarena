@@ -23,21 +23,36 @@ export default function Puzzles() {
   const isPremium = user?.role === "admin" || user?.is_premium === 1;
 
   const customPieces = useMemo(() => {
-    const activeTheme = isPremium ? (localStorage.getItem("gca_piece_theme") || "neo") : "neo";
+    const activeTheme = localStorage.getItem("gca_piece_theme") || "neo";
+    const themeSlug = activeTheme === "gold" ? "metal" : activeTheme;
     const pieces = ["wp", "wn", "wb", "wr", "wq", "wk", "bp", "bn", "bb", "br", "bq", "bk"];
     const map = {};
     pieces.forEach((p) => {
       const key = p.charAt(0) + p.charAt(1).toUpperCase();
+      const isWhite = p.startsWith("w");
+      let filterStyle = "none";
+      if (activeTheme === "gold") {
+        filterStyle = "sepia(1) saturate(6) hue-rotate(10deg) brightness(1.0) contrast(1.1) drop-shadow(0 0 3px rgba(251, 191, 36, 0.7))";
+      } else if (activeTheme === "neon") {
+        filterStyle = isWhite
+          ? "drop-shadow(0 0 5px #06b6d4) brightness(1.2) saturate(1.5)"
+          : "drop-shadow(0 0 5px #ec4899) brightness(1.2) saturate(1.5)";
+      }
       map[key] = ({ squareWidth }) => (
         <img
-          src={`https://images.chesscomfiles.com/chess-themes/pieces/${activeTheme}/150/${p}.png`}
+          src={`https://images.chesscomfiles.com/chess-themes/pieces/${themeSlug}/150/${p}.png`}
           alt={p}
-          style={{ width: squareWidth, height: squareWidth, objectFit: "contain" }}
+          style={{ 
+            width: squareWidth, 
+            height: squareWidth, 
+            objectFit: "contain",
+            filter: filterStyle
+          }}
         />
       );
     });
     return map;
-  }, [isPremium]);
+  }, [user]);
 
   useEffect(() => {
     loadPuzzles();
@@ -148,6 +163,16 @@ export default function Puzzles() {
       });
 
       if (!move) return false;
+
+      // Play chess move sound
+      let audioUrl = "/sounds/move.mp3";
+      if (move.san.includes("+") || move.san.includes("#")) {
+        audioUrl = "/sounds/check.mp3";
+      } else if (move.captured) {
+        audioUrl = "/sounds/capture.mp3";
+      }
+      const audio = new Audio(audioUrl);
+      audio.play().catch(err => console.log("Audio play failed:", err));
 
       // Check if move notation matches the solution
       // E.g., solution: 'f7f5', notation: 'f7f5' or 'f5' or standard san.
@@ -311,22 +336,12 @@ export default function Puzzles() {
   const puzzle = puzzles[currentIndex];
 
   return (
-    <div style={{
-      display: "grid",
-      gridTemplateColumns: "1fr 380px",
-      gap: "24px",
-      alignItems: "start",
-      padding: "12px 0"
-    }}>
+    <div className="puzzles-layout">
       {/* Board Panel */}
-      <div className="panel" style={{
-        padding: "24px",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
+      <div className="panel puzzle-board-panel" style={{
         backgroundColor: "var(--panel-solid)"
       }}>
-        <div style={{ width: "100%", maxWidth: "520px" }}>
+        <div className="puzzle-board-wrap">
           {game && (
             <Chessboard
               position={game.fen()}

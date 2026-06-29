@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import toast from "react-hot-toast";
 import { api, setSession } from "../services/api.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
-import { avatarOptions, getAvatarSrc, normalizeAvatarValue } from "../data/avatarOptions.js";
+import { avatarOptions, getAvatarSrc, normalizeAvatarValue, shopAvatars } from "../data/avatarOptions.js";
 
 export default function Profile() {
   const { user, token, setUser, refreshUser } = useAuth();
@@ -22,6 +22,28 @@ export default function Profile() {
     newPassword: "",
     avatar: normalizeAvatarValue(user?.avatar)
   });
+
+  const [purchasedItems, setPurchasedItems] = useState([]);
+
+  useEffect(() => {
+    if (user) {
+      api("/gamification/shop")
+        .then((data) => {
+          setPurchasedItems(data.purchasedItems || []);
+        })
+        .catch((err) => console.error("Error loading purchased items in Profile:", err));
+    }
+  }, [user]);
+
+  const availableAvatars = useMemo(() => {
+    const list = [...avatarOptions];
+    purchasedItems.forEach(item => {
+      if (item.item_type === "avatar" && shopAvatars[item.item_value]) {
+        list.push(shopAvatars[item.item_value]);
+      }
+    });
+    return list;
+  }, [purchasedItems, user]);
 
   useEffect(() => {
     if (user) {
@@ -99,7 +121,7 @@ export default function Profile() {
           <input type="password" value={form.newPassword} onChange={(event) => setForm({ ...form, newPassword: event.target.value })} />
         </label>
         <div className="avatar-picker" aria-label={lang === "ar" ? "اختيار صورة اللاعب" : "Choose player avatar"}>
-          {avatarOptions.map((avatar) => (
+          {availableAvatars.map((avatar) => (
             <button
               className={form.avatar === avatar.id ? "avatar-choice is-selected" : "avatar-choice"}
               key={avatar.id}
@@ -123,10 +145,12 @@ export default function Profile() {
           }}>
             {[
               { id: "neo", nameEn: "Neo (Default)", nameAr: "نيو (الافتراضي)", isPremium: false },
-              { id: "wood", nameEn: "Wood (Premium)", nameAr: "خشبي (بريميوم)", isPremium: true },
-              { id: "glass", nameEn: "Glass (Premium)", nameAr: "زجاجي (بريميوم)", isPremium: true },
-              { id: "classic", nameEn: "Classic (Premium)", nameAr: "كلاسيكي (بريميوم)", isPremium: true },
-              { id: "alpha", nameEn: "Alpha (Premium)", nameAr: "ألفا (بريميوم)", isPremium: true }
+              { id: "wood", nameEn: "Wood", nameAr: "خشبي", isPremium: true },
+              { id: "neon", nameEn: "Neon", nameAr: "نيون", isPremium: true },
+              { id: "gold", nameEn: "Gold", nameAr: "ذهبي", isPremium: true },
+              { id: "glass", nameEn: "Glass", nameAr: "زجاجي", isPremium: true },
+              { id: "classic", nameEn: "Classic", nameAr: "كلاسيكي", isPremium: true },
+              { id: "alpha", nameEn: "Alpha", nameAr: "ألفا", isPremium: true }
             ].map((theme) => {
               const isSelected = pieceTheme === theme.id;
               return (
@@ -134,8 +158,9 @@ export default function Profile() {
                   type="button"
                   key={theme.id}
                   onClick={() => {
-                    if (theme.isPremium && !isPremium) {
-                      toast.error(lang === "ar" ? "هذا المظهر مخصص للأعضاء المميزين (Premium) فقط!" : "This theme is for Premium members only!");
+                    const ownsTheme = purchasedItems.some(p => p.item_type === "pieces_theme" && p.item_value === theme.id);
+                    if (theme.isPremium && !isPremium && !ownsTheme) {
+                      toast.error(lang === "ar" ? "هذا المظهر مخصص للأعضاء المميزين أو يجب شراؤه من المتجر!" : "This theme is for Premium members or must be purchased from the store!");
                       return;
                     }
                     setPieceTheme(theme.id);
@@ -155,9 +180,19 @@ export default function Profile() {
                   }}
                 >
                   <img
-                    src={`https://images.chesscomfiles.com/chess-themes/pieces/${theme.id}/150/wn.png`}
+                    src={`https://images.chesscomfiles.com/chess-themes/pieces/${theme.id === "gold" ? "metal" : theme.id}/150/wn.png`}
                     alt={theme.id}
-                    style={{ width: "50px", height: "50px", objectFit: "contain", marginBottom: "8px" }}
+                    style={{ 
+                      width: "50px", 
+                      height: "50px", 
+                      objectFit: "contain", 
+                      marginBottom: "8px",
+                      filter: theme.id === "gold"
+                        ? "sepia(1) saturate(6) hue-rotate(10deg) brightness(1.0) contrast(1.1) drop-shadow(0 0 3px rgba(251, 191, 36, 0.7))"
+                        : theme.id === "neon"
+                        ? "drop-shadow(0 0 5px #06b6d4) brightness(1.2) saturate(1.5)"
+                        : "none"
+                    }}
                   />
                   <span style={{ fontSize: "0.82rem", fontWeight: "600", color: isSelected ? "var(--text)" : "var(--muted)" }}>
                     {lang === "ar" ? theme.nameAr : theme.nameEn}

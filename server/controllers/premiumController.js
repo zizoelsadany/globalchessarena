@@ -151,42 +151,86 @@ export async function chatWithAICoach(req, res, next) {
     const matches = await listMatchesForUser(req.user.id);
     const lastMatch = matches[0] || null;
 
-    // Smart simulated Grandmaster replies
-    const msg = message.toLowerCase();
     let reply = "";
-    let replyAr = "";
+    const geminiKey = process.env.GEMINI_API_KEY;
 
-    if (msg.includes("hello") || msg.includes("hi") || msg.includes("مرحبا") || msg.includes("سلام")) {
-      reply = `Hello Grandmaster! I am your AI Coach. I see your current rating is ${req.user.elo_rating} Elo. Ready to review your moves?`;
-      replyAr = `مرحباً بك يا بطل! أنا مدربك الذكي. أرى أن تصنيفك الحالي هو ${req.user.elo_rating} إيلو. هل أنت مستعد لمراجعة حركاتك المتاحة؟`;
-    } else if (msg.includes("opening") || msg.includes("defense") || msg.includes("افتتاح") || msg.includes("دفاع")) {
-      reply = "For your level, I highly recommend mastering 1.e4 openings (like the Ruy Lopez or Italian Game) as White, and the Sicilian Defense or French Defense as Black. They build strong tactical fundamentals.";
-      replyAr = "لمستواك الحالي، أنصحك بشدة بإتقان افتتاحيات 1.e4 (مثل Ruy Lopez أو اللعب الإيطالي) بالقطع البيضاء، ودفاع صقلية أو الدفاع الفرنسي بالقطع السوداء. إنها تبني أُسساً تكتيكية قوية.";
-    } else if (msg.includes("improve") || msg.includes("better") || msg.includes("اتطور") || msg.includes("أتحسن")) {
-      reply = `At ${req.user.elo_rating} Elo, games are mostly decided by tactical blunders. Focus 80% of your training on solving puzzles and checking your opponent's threats before making any move.`;
-      replyAr = `عند مستوى ${req.user.elo_rating} إيلو، تُحسم معظم المباريات بالأخطاء التكتيكية البسيطة. ركز 80% من تدريبك على حل الألغاز والتحقق من تهديدات الخصم قبل القيام بأي حركة.`;
-    } else if (msg.includes("last") || msg.includes("match") || msg.includes("مباراة") || msg.includes("أخر")) {
-      if (lastMatch) {
-        const side = lastMatch.white_player === req.user.id ? "White" : "Black";
-        const sideAr = lastMatch.white_player === req.user.id ? "الأبيض" : "الأسود";
-        const resultText = lastMatch.winner === req.user.id ? "won! Excellent job" : "lost. A great opportunity to learn";
-        const resultTextAr = lastMatch.winner === req.user.id ? "فزت بها! عمل ممتاز" : "خسرتها. فرصة رائعة للتعلم وتجنب الأخطاء";
-        reply = `I looked at your last game where you played as ${side} and ${resultText}. Try reviewing the match history using our analysis board to check for positional improvements.`;
-        replyAr = `لقد اطلعت على مباراتك الأخيرة حيث لعبت باللون ${sideAr} و ${resultTextAr}. حاول مراجعة تاريخ المباراة عبر رقعة التحليل لدينا لمعرفة مواضع التحسين الممكنة.`;
-      } else {
-        reply = "You haven't played any rated matches yet! Go play a game against a player or the AI and then ask me to review it.";
-        replyAr = "لم تلعب أي مباريات مصنفة حتى الآن! اذهب والعب مباراة ضد لاعب آخر أو الكمبيوتر ثم اطلب مني مراجعتها.";
+    if (geminiKey) {
+      try {
+        const prompt = `You are a real, expert Grandmaster Chess Coach named "Global Arena AI Coach". 
+The player's username is "${req.user.username}" and their current ELO rating is ${req.user.elo_rating}. 
+${lastMatch ? `Their last match was played as ${lastMatch.white_player === req.user.id ? 'White' : 'Black'}, and the result was ${lastMatch.result === 'draw' ? 'a draw' : (lastMatch.winner === req.user.id ? 'a win' : 'a loss')} by ${lastMatch.reason || 'game completion'}.` : 'They have not played any games yet.'}
+The player says: "${message}"
+Give a professional, highly encouraging, and instructive reply as a master chess coach. Keep it short (under 120 words). Respond in the language of the user's message (Arabic or English).`;
+
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }]
+          })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        } else {
+          const errText = await response.text();
+          console.error("Gemini API error:", errText);
+        }
+      } catch (geminiErr) {
+        console.error("Failed to connect to Gemini API:", geminiErr);
       }
-    } else {
-      reply = "That's an interesting chess concept. Always remember: control the center, develop your minor pieces (knights and bishops) early, and castle your king to safety as soon as possible!";
-      replyAr = "هذا مفهوم شيق في الشطرنج. تذكر دائماً: سيطر على الوسط، طور قطعك الصغيرة (الخيول والفيلة) مبكراً، وقم بتأمين ملكك عن طريق التبييت في أسرع وقت ممكن!";
     }
 
-    const containsArabic = /[\u0600-\u06FF]/.test(message);
-    const useArabic = containsArabic || (req.body.lang === "ar" && !/[a-zA-Z]/.test(message));
+    if (!reply) {
+      const msg = message.toLowerCase();
+      let replyEn = "";
+      let replyAr = "";
+
+      if (msg.includes("hello") || msg.includes("hi") || msg.includes("مرحبا") || msg.includes("سلام")) {
+        replyEn = `Hello Grandmaster! I am your AI Coach. I see your current rating is ${req.user.elo_rating} Elo. Ready to review your moves?`;
+        replyAr = `مرحباً بك يا بطل! أنا مدربك الذكي. أرى أن تصنيفك الحالي هو ${req.user.elo_rating} إيلو. هل أنت مستعد لمراجعة حركاتك المتاحة؟`;
+      } else if (msg.includes("opening") || msg.includes("defense") || msg.includes("افتتاح") || msg.includes("دفاع")) {
+        replyEn = "For your level, I highly recommend mastering 1.e4 openings (like the Ruy Lopez or Italian Game) as White, and the Sicilian Defense or French Defense as Black. They build strong tactical fundamentals.";
+        replyAr = "لمستواك الحالي، أنصحك بشدة بإتقان افتتاحيات 1.e4 (مثل Ruy Lopez أو اللعب الإيطالي) بالقطع البيضاء، ودفاع صقلية أو الدفاع الفرنسي بالقطع السوداء. إنها تبني أُسساً تكتيكية قوية.";
+      } else if (msg.includes("improve") || msg.includes("better") || msg.includes("اتطور") || msg.includes("أتحسن")) {
+        replyEn = `At ${req.user.elo_rating} Elo, games are mostly decided by tactical blunders. Focus 80% of your training on solving puzzles and checking your opponent's threats before making any move.`;
+        replyAr = `عند مستوى ${req.user.elo_rating} إيلو، تُحسم معظم المباريات بالأخطاء التكتيكية البسيطة. ركز 80% من تدريبك على حل الألغاز والتحقق من تهديدات الخصم قبل القيام بأي حركة.`;
+      } else if (msg.includes("last") || msg.includes("match") || msg.includes("مباراة") || msg.includes("أخر")) {
+        if (lastMatch) {
+          const side = lastMatch.white_player === req.user.id ? "White" : "Black";
+          const sideAr = lastMatch.white_player === req.user.id ? "الأبيض" : "الأسود";
+          const resultText = lastMatch.winner === req.user.id ? "won! Excellent job" : "lost. A great opportunity to learn";
+          const resultTextAr = lastMatch.winner === req.user.id ? "فزت بها! عمل ممتاز" : "خسرتها. فرصة رائعة للتعلم وتجنب الأخطاء";
+          replyEn = `I looked at your last game where you played as ${side} and ${resultText}. Try reviewing the match history using our analysis board to check for positional improvements.`;
+          replyAr = `لقد اطلعت على مباراتك الأخيرة حيث لعبت باللون ${sideAr} و ${resultTextAr}. حاول مراجعة تاريخ المباراة عبر رقعة التحليل لدينا لمعرفة مواضع التحسين الممكنة.`;
+        } else {
+          replyEn = "You haven't played any rated matches yet! Go play a game against a player or the AI and then ask me to review it.";
+          replyAr = "لم تلعب أي مباريات مصنفة حتى الآن! اذهب والعب مباراة ضد لاعب آخر أو الكمبيوتر ثم اطلب مني مراجعتها.";
+        }
+      } else {
+        replyEn = "That's an interesting chess concept. Always remember: control the center, develop your minor pieces (knights and bishops) early, and castle your king to safety as soon as possible!";
+        replyAr = "هذا مفهوم شيق في الشطرنج. تذكر دائماً: سيطر على الوسط، طور قطعك الصغيرة (الخيول والفيلة) مبكراً، وقم بتأمين ملكك عن طريق التبييت في أسرع وقت ممكن!";
+      }
+
+      const containsArabic = /[\u0600-\u06FF]/.test(message);
+      const useArabic = containsArabic || (req.body.lang === "ar" && !/[a-zA-Z]/.test(message));
+      
+      const configNoticeEn = "\n\n💡 (Tip: To unlock a real-time Grandmaster Gemini AI Coach, please add GEMINI_API_KEY to your server/.env file!)";
+      const configNoticeAr = "\n\n💡 (نصيحة: لتفعيل مدرب الذكاء الاصطناعي الحقيقي الذكي Gemini GM، يرجى إضافة مفتاح GEMINI_API_KEY إلى ملف server/.env الخاص بك!)";
+
+      reply = (useArabic ? replyAr : replyEn) + (useArabic ? configNoticeAr : configNoticeEn);
+    }
+
+    try {
+      const { updateQuestProgress } = await import("../services/questService.js");
+      await updateQuestProgress(req.user.id, "chat_ai");
+    } catch (questErr) {
+      console.error("Failed to update quest progress for AI coach chat:", questErr);
+    }
 
     res.json({
-      reply: useArabic ? replyAr : reply
+      reply: reply
     });
   } catch (error) {
     next(error);
@@ -250,6 +294,13 @@ export async function solvePuzzle(req, res, next) {
       "INSERT INTO user_puzzle_attempts (user_id, puzzle_id, solved_at) VALUES (:userId, :puzzleId, CURDATE())",
       { userId, puzzleId }
     );
+
+    try {
+      const { updateQuestProgress } = await import("../services/questService.js");
+      await updateQuestProgress(userId, "solve_puzzle");
+    } catch (questErr) {
+      console.error("Failed to update quest progress for puzzle solve:", questErr);
+    }
 
     res.json({ success: true, message: "Puzzle solved successfully / تم حل اللغز بنجاح!" });
   } catch (error) {
@@ -325,3 +376,57 @@ export async function verifyCheckout(req, res, next) {
     next(error);
   }
 }
+
+export async function createManualPayment(req, res, next) {
+  try {
+    const userId = req.user.id;
+    const { payment_method, sender_number, transaction_id, coins_amount, amount } = req.body;
+
+    if (!payment_method) {
+      return res.status(400).json({ message: "Payment method is required / طريقة الدفع مطلوبة" });
+    }
+
+    const sessionId = `manual_session_${Math.random().toString(36).substring(2, 12)}${Date.now()}`;
+    const receiptUrl = req.file ? `/uploads/${req.file.filename}` : null;
+    const coinsNum = Number(coins_amount) || 0;
+    const totalAmount = Number(amount) || 9.99;
+
+    // Log the manual payment in review status
+    await pool.execute(
+      `INSERT INTO payments 
+       (user_id, amount, currency, status, stripe_session_id, receipt_url, sender_number, transaction_id, payment_method, coins_amount) 
+       VALUES (:userId, :amount, 'EGP', 'review', :sessionId, :receiptUrl, :senderNumber, :transactionId, :paymentMethod, :coinsAmount)`,
+      { 
+        userId, 
+        amount: totalAmount,
+        sessionId, 
+        receiptUrl, 
+        senderNumber: sender_number || null, 
+        transactionId: transaction_id || null, 
+        paymentMethod: payment_method,
+        coinsAmount: coinsNum
+      }
+    );
+
+    // Create Admin Notification
+    const adminMsg = `لاعب الشطرنج ${req.user.username} أرسل طلب شراء يدوي (${payment_method}) بقيمة ${totalAmount} ج.م لعدد ${coinsNum} عملة. يرجى المراجعة والتفعيل.`;
+    await createNotification(adminMsg);
+
+    // Send Email to Admin
+    try {
+      const { sendAdminPremiumRequestEmail } = await import("../services/emailService.js");
+      await sendAdminPremiumRequestEmail(req.user.username, sessionId);
+    } catch (emailErr) {
+      console.error("Failed to send admin premium request email:", emailErr);
+    }
+
+    res.json({ 
+      success: true, 
+      pendingApproval: true,
+      message: "Your manual payment details have been submitted for review. / تم إرسال تفاصيل الدفع اليدوي للمراجعة والتفعيل." 
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+

@@ -1,8 +1,8 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState, useRef } from "react";
 import toast from "react-hot-toast";
 import { Chessboard } from "react-chessboard";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { Clock, Flag, Maximize2, Minimize2, ShieldAlert, Swords } from "lucide-react";
+import { Clock, Flag, Maximize2, Minimize2, ShieldAlert, Swords, RotateCcw } from "lucide-react";
 import { Chess } from "chess.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useSocket } from "../context/SocketContext.jsx";
@@ -249,6 +249,29 @@ function getAiElo(level) {
   }
 }
 
+function playMoveSound(fen, pgn) {
+  if (!pgn) return;
+  try {
+    const tempChess = new Chess();
+    tempChess.loadPgn(pgn);
+    const history = tempChess.history({ verbose: true });
+    if (history.length === 0) return;
+    const lastMove = history[history.length - 1];
+    
+    let audioUrl = "/sounds/move.mp3";
+    if (lastMove.san.includes("+") || lastMove.san.includes("#")) {
+      audioUrl = "/sounds/check.mp3";
+    } else if (lastMove.captured) {
+      audioUrl = "/sounds/capture.mp3";
+    }
+    
+    const audio = new Audio(audioUrl);
+    audio.play().catch(err => console.log("Audio play failed:", err));
+  } catch (e) {
+    console.error("Failed to play move sound:", e);
+  }
+}
+
 export default function GameRoom() {
   const { roomId } = useParams();
   const { state } = useLocation();
@@ -261,6 +284,52 @@ export default function GameRoom() {
   const [ended, setEnded] = useState(null);
   const [focusMode, setFocusMode] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
+  const [displayedFen, setDisplayedFen] = useState(null);
+  const [replaying, setReplaying] = useState(false);
+  const isFirstLoad = useRef(true);
+
+  const replayLastMove = useCallback(() => {
+    if (!game?.pgn || replaying) return;
+    try {
+      const tempChess = new Chess();
+      tempChess.loadPgn(game.pgn);
+      const history = tempChess.history({ verbose: true });
+      if (history.length === 0) return;
+      
+      const last = tempChess.undo();
+      if (!last) return;
+      
+      const prevFen = tempChess.fen();
+      setReplaying(true);
+      setDisplayedFen(prevFen);
+      
+      setTimeout(() => {
+        setDisplayedFen(game.fen);
+        playMoveSound(game.fen, game.pgn);
+        setTimeout(() => {
+          setDisplayedFen(null);
+          setReplaying(false);
+        }, 600);
+      }, 700);
+    } catch (err) {
+      console.error("Replay error:", err);
+      setReplaying(false);
+      setDisplayedFen(null);
+    }
+  }, [game?.fen, game?.pgn, replaying]);
+
+  // Play sound when FEN/PGN changes
+  useEffect(() => {
+    if (game?.pgn) {
+      if (isFirstLoad.current) {
+        isFirstLoad.current = false;
+        return;
+      }
+      if (!replaying) {
+        playMoveSound(game.fen, game.pgn);
+      }
+    }
+  }, [game?.fen, game?.pgn, replaying]);
 
   const onGameUpdate = useCallback((payload) => {
     if (!payload) return;
@@ -361,17 +430,31 @@ export default function GameRoom() {
   }, [game?.pgn]);
 
   const customPieces = useMemo(() => {
-    const isPremium = user?.role === "admin" || user?.is_premium === 1;
-    const activeTheme = isPremium ? (localStorage.getItem("gca_piece_theme") || "neo") : "neo";
+    const activeTheme = localStorage.getItem("gca_piece_theme") || "neo";
+    const themeSlug = activeTheme === "gold" ? "metal" : activeTheme;
     const pieces = ["wp", "wn", "wb", "wr", "wq", "wk", "bp", "bn", "bb", "br", "bq", "bk"];
     const map = {};
     pieces.forEach((p) => {
       const key = p.charAt(0) + p.charAt(1).toUpperCase();
+      const isWhite = p.startsWith("w");
+      let filterStyle = "none";
+      if (activeTheme === "gold") {
+        filterStyle = "sepia(1) saturate(6) hue-rotate(10deg) brightness(1.0) contrast(1.1) drop-shadow(0 0 3px rgba(251, 191, 36, 0.7))";
+      } else if (activeTheme === "neon") {
+        filterStyle = isWhite
+          ? "drop-shadow(0 0 5px #06b6d4) brightness(1.2) saturate(1.5)"
+          : "drop-shadow(0 0 5px #ec4899) brightness(1.2) saturate(1.5)";
+      }
       map[key] = ({ squareWidth }) => (
         <img
-          src={`https://images.chesscomfiles.com/chess-themes/pieces/${activeTheme}/150/${p}.png`}
+          src={`https://images.chesscomfiles.com/chess-themes/pieces/${themeSlug}/150/${p}.png`}
           alt={p}
-          style={{ width: squareWidth, height: squareWidth, objectFit: "contain" }}
+          style={{ 
+            width: squareWidth, 
+            height: squareWidth, 
+            objectFit: "contain",
+            filter: filterStyle
+          }}
         />
       );
     });
@@ -445,6 +528,15 @@ export default function GameRoom() {
         pgn: ended.pgn,
         moves
       });
+
+      // Save to backend database
+      api("/matches/computer", {
+        method: "POST",
+        body: JSON.stringify({
+          result: ended.result,
+          reason: ended.reason
+        })
+      }).catch(err => console.error("Failed to save computer match to database:", err));
     }
   }, [ended, roomId, gameStartTime, user?.id]);
 
@@ -638,6 +730,24 @@ export default function GameRoom() {
           selected: "rgba(92, 147, 228, 0.4)",
           lastMove: "rgba(92, 147, 228, 0.22)"
         };
+      case "golden":
+        return {
+          dotDarkSquare: "rgba(255, 251, 235, 0.65)",
+          dotLightSquare: "rgba(181, 140, 61, 0.85)",
+          captureDarkSquare: "rgba(255, 251, 235, 0.75)",
+          captureLightSquare: "rgba(181, 140, 61, 0.95)",
+          selected: "rgba(251, 191, 36, 0.4)",
+          lastMove: "rgba(251, 191, 36, 0.22)"
+        };
+      case "neon":
+        return {
+          dotDarkSquare: "rgba(236, 254, 255, 0.65)",
+          dotLightSquare: "rgba(8, 145, 178, 0.85)",
+          captureDarkSquare: "rgba(236, 254, 255, 0.75)",
+          captureLightSquare: "rgba(8, 145, 178, 0.95)",
+          selected: "rgba(6, 182, 212, 0.4)",
+          lastMove: "rgba(6, 182, 212, 0.22)"
+        };
       case "black":
       default:
         return {
@@ -712,6 +822,7 @@ export default function GameRoom() {
   }, [ended, game?.status, game?.turn, myColor, chess, themeColors]);
 
   const onSquareClick = useCallback((square) => {
+    if (replaying) return;
     if (optionSquares[square] && square !== selectedSquare) {
       const moveSuccessful = onPieceDrop(selectedSquare, square);
       if (moveSuccessful) {
@@ -732,6 +843,7 @@ export default function GameRoom() {
   }, [optionSquares, selectedSquare, getMoveOptions]);
 
   const onPieceDragBegin = useCallback((piece, square) => {
+    if (replaying) return;
     const options = getMoveOptions(square);
     if (options) {
       setOptionSquares(options);
@@ -781,6 +893,7 @@ export default function GameRoom() {
   }, [onGameEnd, aiLevel]);
 
   function onPieceDrop(sourceSquare, targetSquare) {
+    if (replaying) return false;
     if (!game || game.status !== "active" || ended) return false;
 
     const moves = chess.moves({ square: sourceSquare, verbose: true });
@@ -867,9 +980,33 @@ export default function GameRoom() {
             <span className="eyebrow">{t("liveMatch")}</span>
             <strong>{white?.username || (lang === "ar" ? "الأبيض" : "White")} {t("vs")} {black?.username || (lang === "ar" ? "الأسود" : "Black")}</strong>
           </div>
-          <button className="icon-action" onClick={() => setFocusMode((value) => !value)} title={focusMode ? (lang === "ar" ? "إلغاء وضع التركيز" : "Exit focus") : (lang === "ar" ? "وضع التركيز" : "Focus match")}>
-            {focusMode ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {movesHistory.length > 0 && (
+              <button 
+                className="icon-action" 
+                onClick={replayLastMove} 
+                disabled={replaying}
+                style={{ 
+                  width: 'auto', 
+                  padding: '0 12px', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '6px',
+                  opacity: replaying ? 0.6 : 1,
+                  cursor: replaying ? 'not-allowed' : 'pointer'
+                }}
+                title={t("showLastMove")}
+              >
+                <RotateCcw size={16} className={replaying ? "spin" : ""} />
+                <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>
+                  {t("lastMove")}
+                </span>
+              </button>
+            )}
+            <button className="icon-action" onClick={() => setFocusMode((value) => !value)} title={focusMode ? (lang === "ar" ? "إلغاء وضع التركيز" : "Exit focus") : (lang === "ar" ? "وضع التركيز" : "Focus match")}>
+              {focusMode ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+            </button>
+          </div>
         </div>
 
         <div className={`player-strip game-player-card glass ${game?.turn === (myColor === "white" ? "b" : "w") ? "is-turn" : ""}`}>
@@ -888,7 +1025,7 @@ export default function GameRoom() {
           <div className="board-wrap">
           <Chessboard
             id="global-chess-arena-board"
-            position={game?.fen || "start"}
+            position={displayedFen || game?.fen || "start"}
             boardOrientation={myColor}
             onPieceDrop={onPieceDrop}
             onPieceDragBegin={onPieceDragBegin}

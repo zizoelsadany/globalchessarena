@@ -1,16 +1,17 @@
 import bcrypt from "bcrypt";
 import { z } from "zod";
 import { findUserById, findUserWithPasswordById, listUsers, updateUserProfile } from "../models/User.js";
+import { emailSchema } from "./authController.js";
 
 const avatarSchema = z
-  .enum(["crown", "knight", "rook", "pawn", "bishop", "queen"])
+  .enum(["crown", "knight", "rook", "pawn", "bishop", "queen", "avatar_king", "avatar_wizard"])
   .or(z.string().url().max(500))
   .optional()
   .or(z.literal(""));
 
 export const profileSchema = z.object({
-  username: z.string().trim().min(3).max(32).regex(/^[a-zA-Z0-9_]+$/).optional().or(z.literal("")),
-  email: z.string().trim().email().max(255).optional().or(z.literal("")),
+  username: z.string().trim().min(3).max(16).regex(/^[a-zA-Z0-9_]+$/, "Username must contain only English letters, numbers, or underscores (3-16 characters) / يجب أن يحتوي اسم المستخدم على حروف إنجليزية، أرقام أو شرطة سفلية فقط (3-16 حرف)").optional().or(z.literal("")),
+  email: emailSchema.optional().or(z.literal("")),
   currentPassword: z.string().optional().or(z.literal("")),
   newPassword: z.string().min(8).max(128).optional().or(z.literal("")),
   avatar: avatarSchema
@@ -62,9 +63,11 @@ export async function updateProfile(req, res, next) {
 export async function leaderboard(req, res, next) {
   try {
     const users = await listUsers({ limit: 100 });
+    // Hide 'Computer' user from leaderboard
+    const filteredUsers = users.filter((u) => u.username !== "Computer");
     // If the requester is an admin, return full list; otherwise hide admin accounts
     const isAdmin = req.user && req.user.role === "admin";
-    const result = isAdmin ? users : users.filter((u) => u.role !== "admin");
+    const result = isAdmin ? filteredUsers : filteredUsers.filter((u) => u.role !== "admin");
     res.json({ users: result });
   } catch (error) {
     next(error);

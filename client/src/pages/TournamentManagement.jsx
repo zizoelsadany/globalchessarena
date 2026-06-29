@@ -315,11 +315,11 @@ export default function TournamentManagement() {
               <tbody>
                 {(dashboard?.tournaments || []).map((tournament) => (
                   <tr key={tournament.id}>
-                    <td>{tournament.name}</td>
-                    <td>{tournament.status}</td>
-                    <td>{tournament.participant_count ?? 0}/{tournament.max_participants ?? 64}</td>
-                    <td>{tournament.ends_at ? new Date(tournament.ends_at).toLocaleDateString(lang === "ar" ? "ar-EG" : "en-US") : "-"}</td>
-                    <td style={{ display: "flex", gap: 6, flexWrap: "wrap", fontSize: "0.9rem" }}>
+                    <td data-label={lang === "ar" ? "الاسم" : "Name"}>{tournament.name}</td>
+                    <td data-label={lang === "ar" ? "الحالة" : "Status"}>{tournament.status}</td>
+                    <td data-label={lang === "ar" ? "عدد المشتركين" : "Players"}>{tournament.participant_count ?? 0}/{tournament.max_participants ?? 64}</td>
+                    <td data-label={lang === "ar" ? "ينتهي" : "Ends"}>{tournament.ends_at ? new Date(tournament.ends_at).toLocaleDateString(lang === "ar" ? "ar-EG" : "en-US") : "-"}</td>
+                    <td data-label={lang === "ar" ? "إجراءات" : "Actions"} style={{ display: "flex", gap: 6, flexWrap: "wrap", fontSize: "0.9rem", justifyContent: "flex-end" }}>
                       <button className="primary" type="button" onClick={() => handleEditTournament(tournament)}>
                         {lang === "ar" ? "تعديل" : "Edit"}
                       </button>
@@ -357,8 +357,8 @@ export default function TournamentManagement() {
                     ) : (
                       participants.map((p) => (
                         <tr key={p.id}>
-                          <td>{p.username}</td>
-                          <td>{p.elo_rating || 0}</td>
+                          <td data-label={lang === "ar" ? "الاسم" : "Name"}>{p.username}</td>
+                          <td data-label={lang === "ar" ? "تصنيف إيلو" : "Elo Rating"}>{p.elo_rating || 0}</td>
                         </tr>
                       ))
                     )}
@@ -446,15 +446,15 @@ export default function TournamentManagement() {
                     ) : (
                       matches.map((match) => (
                         <tr key={match.id}>
-                          <td>{match.white_username} ({match.white_elo})</td>
-                          <td>{match.black_username} ({match.black_elo})</td>
-                          <td>
+                          <td data-label={lang === "ar" ? "الأبيض" : "White"}>{match.white_username} ({match.white_elo})</td>
+                          <td data-label={lang === "ar" ? "الأسود" : "Black"}>{match.black_username} ({match.black_elo})</td>
+                          <td data-label={lang === "ar" ? "المعاد" : "Scheduled"}>
                             {match.scheduled_time
                               ? new Date(match.scheduled_time).toLocaleString(lang === "ar" ? "ar-EG" : "en-US")
                               : lang === "ar" ? "لم يتم تحديده" : "Not scheduled"}
                           </td>
-                          <td>{match.winner_username ? `${match.winner_username} won` : lang === "ar" ? "قيد اللعب" : "In progress"}</td>
-                          <td>
+                          <td data-label={lang === "ar" ? "النتيجة" : "Result"}>{match.winner_username ? `${match.winner_username} won` : lang === "ar" ? "قيد اللعب" : "In progress"}</td>
+                          <td data-label={lang === "ar" ? "إجراءات" : "Actions"}>
                             {!match.winner_username ? (
                               <button
                                 className="primary as-link"

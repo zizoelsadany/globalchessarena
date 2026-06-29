@@ -15,6 +15,7 @@ import notificationRoutes from "./routes/notificationRoutes.js";
 import reportRoutes from "./routes/reportRoutes.js";
 import tournamentRoutes from "./routes/tournamentRoutes.js";
 import premiumRoutes from "./routes/premiumRoutes.js";
+import gamificationRoutes from "./routes/gamificationRoutes.js";
 import { errorHandler, notFound } from "./middleware/errorHandler.js";
 import { tournamentUpload } from "./middleware/upload.js";
 import { configureSockets } from "./sockets/gameSocket.js";
@@ -37,7 +38,7 @@ if (env.nodeEnv === "development") {
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.has(origin)) {
+      if (!origin || allowedOrigins.has(origin) || origin.endsWith(".trycloudflare.com")) {
         return callback(null, true);
       }
       callback(new Error("Not allowed by CORS"));
@@ -74,6 +75,7 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/tournaments", tournamentRoutes);
 app.use("/api/premium", premiumRoutes);
+app.use("/api/gamification", gamificationRoutes);
 app.use("/api", notFound);
 
 if (env.nodeEnv === "production") {
